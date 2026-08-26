@@ -76,6 +76,16 @@ Las URLs de descarga/preview que devuelve la API son **URLs firmadas** (expiran 
 `AWS_S3_SIGNED_URL_EXPIRES_IN` segundos configurados), por lo que el bucket puede permanecer
 privado.
 
+## Autenticación desde clientes móviles
+
+El navegador recibe el refresh token únicamente en una cookie `httpOnly` (no accesible desde JS,
+para mitigar robo por XSS). React Native no tiene un cookie jar persistente equivalente, así que
+un cliente que envíe el header `X-Client-Type: mobile` en `/auth/register`, `/auth/login` y
+`/auth/refresh` recibe además el `refreshToken` en el cuerpo de la respuesta JSON, para que la
+app lo guarde en almacenamiento seguro (Keychain/Keystore) y lo reenvíe como
+`Authorization: Bearer <refreshToken>` al llamar a `/auth/refresh`. Sin ese header, el
+comportamiento es el mismo de siempre (solo cookie).
+
 ## Modelo de datos
 
 - `User` — email + hash de contraseña (bcrypt).

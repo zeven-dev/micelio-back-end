@@ -14,7 +14,12 @@ function extractFromCookie(req: Request): string | null {
 export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
   constructor(configService: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([extractFromCookie]),
+      // Browsers send the refresh token via the httpOnly cookie; native clients
+      // (no persistent cookie jar) send it explicitly as a Bearer token instead.
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        extractFromCookie,
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ]),
       ignoreExpiration: false,
       secretOrKey: configService.get<string>('jwt.refreshSecret')!,
       passReqToCallback: false,
