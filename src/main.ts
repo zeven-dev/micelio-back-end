@@ -36,13 +36,11 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
+  // El health check vive en `AppController` (`GET /api/health`, marcado `@Public()`).
+  // Antes se registraba además una ruta suelta `/health` después de `listen()`, que
+  // nunca llegó a responder (404): se eliminó para no anunciar un endpoint inexistente.
   const port = process.env.PORT ?? 3000;
   await app.listen(port, '0.0.0.0');
-
-  // health check endpoint
-  app.getHttpAdapter().get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
-  });
 }
 
 bootstrap();

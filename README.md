@@ -113,7 +113,12 @@ comportamiento es el mismo de siempre (solo cookie).
 | POST   | `/api/auth/login`           | Inicia sesión                             |
 | POST   | `/api/auth/refresh`         | Renueva el access token (cookie refresh)  |
 | POST   | `/api/auth/logout`          | Cierra sesión                             |
-| GET    | `/api/auth/me`               | Usuario autenticado                       |
+| GET    | `/api/users/me`             | Perfil propio (`Me`: `UserPublic` + email + rol) |
+| PATCH  | `/api/users/me`             | Edita nombre, bio y visibilidad del perfil |
+| PATCH  | `/api/users/me/avatar`      | Sube el avatar (multipart)                |
+| GET    | `/api/users/:username`      | Perfil público (limitado si es privado)   |
+| PATCH  | `/api/admin/users/:id/role` | Asigna un rol (solo ADMIN)                |
+| GET    | `/api/health`               | Health check (público)                    |
 | GET    | `/api/folders`              | Lista carpetas del usuario                |
 | POST   | `/api/folders`              | Crea una carpeta                          |
 | PATCH  | `/api/folders/:id`          | Renombra una carpeta                      |
