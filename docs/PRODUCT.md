@@ -1,0 +1,123 @@
+# Micelio — Visión del producto
+
+> Copia canónica. Las copias en `micelio-front-end/docs/PRODUCT.md` y
+> `micelio-app/docs/PRODUCT.md` deben mantenerse sincronizadas con esta.
+
+## Qué es Micelio
+
+Micelio es una red social enfocada en **arte y elementos audiovisuales**: cada usuario construye
+un perfil tipo Instagram que funciona a la vez como **repositorio** de su obra y como
+**comunidad digital** para compartir los procesos creativos de diferentes artistas.
+
+El nombre importa: un micelio conecta todo bajo la superficie. La aplicación debe sentirse
+**viva y conectada** — cada interacción tiene animaciones cuidadas (por ejemplo, dar "me gusta"
+genera una onda expansiva por el fondo visual de la aplicación, como si el like se propagara por
+la red). Ver `docs/DESIGN-SYSTEM.md` en los repos de front y app.
+
+## Plataformas
+
+| Repo | Qué es |
+| --- | --- |
+| `micelio-back-end` | API NestJS + PostgreSQL + S3 (única fuente de datos) |
+| `micelio-front-end` | Web (Vue 3). Debe aprovechar mejor imágenes anchas y grandes |
+| `micelio-app` | Móvil (Expo / React Native), Android e iOS |
+
+Web y app **no comparten librerías** pero sí deben verse consistentes: mismos colores,
+tipografías, estilo y sensación. La experiencia de usuario es siempre la prioridad; la app debe
+estar muy bien optimizada para móvil.
+
+## Tipos de usuario
+
+1. **Usuario promedio** — crea y sube publicaciones, construye y reorganiza su feed, crea
+   carpetas ("proyectos") con sub-carpetas, agrega descripciones a sus publicaciones.
+2. **Usuario profesor** — todo lo anterior, y además: crea grupos (curso/clase) de usuarios,
+   crea carpetas de grupo donde los alumnos cargan archivos (el alumno decide si ese archivo
+   también va a su feed; siempre queda en su biblioteca), ve tablas de alumnos con los trabajos
+   cargados y les asigna calificaciones. *(El detalle de la visualización está por delimitar.)*
+3. **Usuario administrador** — permisos elevados sobre toda la aplicación: acceso a todos los
+   recursos, carpetas, bibliotecas, chats y configuración. *(La forma de visualizar tanta
+   información está por determinar.)*
+4. **Usuario de soporte** — el administrador le delega permisos de visualización elevados para
+   gestionar incidentes. *(Alcance por determinar.)*
+
+## Registro e identidad
+
+- Registro con: **cédula, nombre, username, contraseña y correo**.
+- El **username/nametag** es único y sirve para reconocer y buscar usuarios.
+
+## Funcionalidades
+
+### Perfil y feed personal
+- Perfil tipo Instagram: descripción (bio), foto de perfil, feed propio.
+- El usuario **construye su feed a su gusto**: reorganiza, mueve y adecúa imágenes y videos como
+  quiera. *(Los límites exactos de esta reorganización están por delimitar; en principio,
+  reordenamiento libre de fotos y videos.)*
+- Imágenes de diferentes tamaños en feeds y home; visualización similar a Tumblr / Instagram / X.
+
+### Biblioteca y carpetas (proyectos)
+- Cada usuario tiene una biblioteca de archivos subidos (imágenes, videos, texto).
+- Carpetas = "proyectos"; admiten **sub-carpetas**.
+- La biblioteca alimenta publicaciones; es **independiente** de los archivos de chat.
+
+### Publicaciones e interacciones
+- Publicaciones con descripción, a partir de medios de la biblioteca.
+- **Likes**: se cuentan y almacenan, pero el contador solo es visible para el dueño de la
+  publicación.
+- **Comentarios** en publicaciones.
+- **Guardar** publicaciones de otros usuarios para verlas después.
+- **Compartir** publicaciones por chat.
+
+### Home
+- Espacio tipo Instagram/Tumblr con publicaciones de los usuarios.
+
+### Chat
+- Mensajería entre usuarios: texto, imágenes, audios y videos (implica **sockets**).
+- Los adjuntos de chat pertenecen al chat, **no** a la biblioteca de publicaciones: son cosas
+  separadas.
+
+### Notificaciones
+- Para mensajes, comentarios, me gustas y publicaciones.
+- Puede segmentarse a un microservicio si el trabajo lo amerita — **se conversa primero con el
+  dueño del producto**; de ser necesario, él creará otro repositorio.
+
+### Mercado (market)
+- Espacio propio de cada usuario para poner en venta o promocionar **obras, creaciones,
+  servicios o eventos**.
+- Separado del feed, pero el usuario puede decidir compartir un ítem del market en su feed.
+- Cada publicación de market lleva **categoría obligatoria**: `servicio`, `obra`, `evento`,
+  `recurso`, etc., para permitir filtros en la búsqueda.
+
+### Búsqueda
+- Búsqueda de **usuarios** (por username/nombre) y de **palabras clave** en publicaciones.
+- La sección de búsqueda (como la de Instagram) también muestra los ítems del market, filtrables
+  por categoría.
+
+### Grupos de profesores
+- El profesor crea grupos, agrega usuarios, crea carpetas de curso.
+- Los alumnos cargan archivos a esas carpetas; el archivo queda en su biblioteca y ellos deciden
+  si usarlo en su feed.
+- El profesor ve tablas de alumnos y trabajos, y asigna calificaciones. *(Por delimitar más.)*
+
+## Diseño (abierto y fácil de modificar)
+
+El diseño debe quedar centralizado en tokens para que un ajuste grande sea trivial:
+
+- **Color principal:** `#222222`
+- **Color secundario:** `#ffbe09`
+- **Complementarios:** `#FF2F2F`, `#2176FF`
+- **Tipografías:** Poppins (principal), Montserrat (secundaria)
+- **Estilo:** Modern Dark con Glassmorphism; color dinámico "vivo" — degradados en movimiento en
+  bordes y elementos resaltados.
+- Animaciones bonitas en cada interacción; la onda expansiva del like es la firma visual.
+
+## Preguntas abiertas (pendientes del dueño del producto)
+
+1. ¿El home se alimenta de usuarios seguidos (¿existe "seguir"?) o es descubrimiento global?
+2. Notificaciones: ¿módulo en el monolito o microservicio en repo aparte?
+3. ¿El autor de un like es visible para el dueño de la publicación o solo el contador?
+4. Cédula: ¿formato/validación por país? ¿única por cuenta?
+5. Market: ¿solo publicación/promoción, o habrá pagos dentro de la app?
+6. ¿Perfiles públicos por defecto? ¿Habrá cuentas privadas?
+7. Reorganización del feed: ¿grid reordenable tipo Instagram o layout libre tipo collage?
+8. ¿Quién otorga el rol profesor? ¿Solo el administrador?
+9. ¿Límites de tamaño/duración para videos y audios?
