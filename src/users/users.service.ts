@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
@@ -44,6 +45,8 @@ export interface MeView extends UserPublicView {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
@@ -108,8 +111,17 @@ export class UsersService {
       where: { id: userId },
       data: { avatarKey: key },
     });
+    // El avatar nuevo ya está guardado y referenciado: borrar el anterior es limpieza,
+    // no parte del cambio. Si S3 falla aquí, se registra y se deja la key huérfana en
+    // vez de responder 500 sobre una actualización que sí se aplicó.
     if (user.avatarKey) {
-      await this.storageService.delete(user.avatarKey);
+      try {
+        await this.storageService.delete(user.avatarKey);
+      } catch (error) {
+        this.logger.warn(
+          `No se pudo borrar el avatar anterior (${user.avatarKey}): ${String(error)}`,
+        );
+      }
     }
 
     const publicView = await this.toUserPublic(updated, { includeExtended: true });

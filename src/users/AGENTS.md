@@ -10,6 +10,8 @@ otro módulo).
   todavía (llega en la Fase 2 con los campos de layout del feed).
 - `PATCH /api/users/me/avatar` (multipart, campo `avatar`) — sube a S3 vía `StorageService`
   (prefijo `avatars/{userId}/`, solo `image/jpeg|png|webp`, máx 5 MB) y borra la key anterior.
+  El borrado es limpieza *best-effort*: si S3 falla se registra un warning y la key queda
+  huérfana, en vez de devolver `500` sobre un avatar que sí quedó guardado.
 - `GET /api/users/:username` — `UserPublic`; si el viewer no es el dueño y el perfil no es
   público, se omiten `bio` y `feedSettings`. Requiere autenticación (no es `@Public()`).
 
