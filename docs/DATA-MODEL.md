@@ -13,21 +13,30 @@ sección de existentes con su detalle final.
 ## Entidades existentes
 
 ### User (`users`)
-Cuenta de la aplicación. Hoy solo soporta email/contraseña.
+Cuenta de la aplicación e identidad social (Fase 0: registro con cédula/username/rol).
 
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | id | uuid PK | |
 | email | string único | credencial de login |
 | passwordHash | string | bcrypt |
-| name | string? | |
+| name | string? | requerido por el DTO de registro; la columna sigue nullable a nivel de esquema |
+| cedula | string único | formato colombiano; solo se valida formato básico (6–10 dígitos), sin contraste externo. **Nunca se devuelve** en ninguna respuesta |
+| username | string único | nametag público; formato elegido (simple, sin espec previa): `^[a-z0-9_.]{3,30}$` |
+| role | enum `Role` @default(`USER`) | `USER \| TEACHER \| ADMIN \| SUPPORT`; solo un ADMIN lo cambia (`PATCH /api/admin/users/:id/role`) |
+| bio | string? | editable vía `PATCH /api/users/me` |
+| avatarKey | string? | key en S3; se sube vía `PATCH /api/users/me/avatar` (multipart) |
+| isPublic | boolean @default(`false`) | perfiles privados por defecto |
 | createdAt / updatedAt | datetime | |
 
 Relaciones: `1—N Folder`.
 
-Pendiente (Fase 0 del roadmap): `cedula` (único, formato colombiano, sin validar por ahora),
-`username` (único, nametag público), `role` (enum `USER | TEACHER | ADMIN | SUPPORT`), `bio`,
-`avatarKey`, `isPublic` (default `false`: perfiles privados por defecto).
+Migración: `20260831000000_extend_user_identity_roles`.
+
+### Enum Role (Fase 0)
+`USER | TEACHER | ADMIN | SUPPORT`. Viaja en el JWT (access y refresh) para que `RolesGuard`
+no necesite una consulta a base de datos por request; un cambio de rol se refleja en el
+siguiente refresh de token (el access token dura poco, `JWT_ACCESS_EXPIRES_IN`).
 
 ### Folder (`folders`)
 Carpeta/"proyecto" de un usuario para organizar su biblioteca de archivos.
@@ -69,14 +78,8 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 > Nada de esto existe aún. Cada fase del `ROADMAP.md` indica cuándo implementarlo. Los nombres
 > son la convención a seguir; si al implementar cambia algo, se actualiza aquí con el porqué.
 
-### Fase 0 — Identidad y roles
-- **User** gana: `cedula String @unique` (formato colombiano; solo se almacena, sin validación
-  por ahora — futura validación contra bases de datos de la Universidad de Antioquia),
-  `username String @unique`, `role Role @default(USER)`, `bio String?`, `avatarKey String?`,
-  `isPublic Boolean @default(false)` (perfiles **privados por defecto**; el dueño puede hacerse
-  público desde la configuración de su perfil).
-- **enum Role**: `USER | TEACHER | ADMIN | SUPPORT`. El rol TEACHER lo asigna un ADMIN
-  (endpoint de admin); en el futuro será automático vía contraste con la universidad.
+### Fase 0 — Identidad y roles — **implementado**
+Ver la entidad `User` y el enum `Role` en "Entidades existentes" arriba.
 
 ### Fase 2 — Publicaciones y feed propio
 - **Post**: `id, authorId → User, description, tags String[] (máx 10, normalizadas por el
@@ -166,3 +169,4 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 | 2026-08-31 | Documento creado con el modelo actual (User, Folder, FileAsset) y el objetivo | Punto de partida de la documentación del proyecto |
 | 2026-08-31 | Modelo objetivo ampliado: `isPublic` (privado por defecto), `Follow` con favoritos, ajustes de feed (layout/columnas/espaciado), likes con lista visible al dueño, `Notification` sin FKs (extraíble), fases renumeradas | Decisiones del dueño del producto (ver `PRODUCT.md`) |
 | 2026-08-31 | `tags` en Post; nueva Fase 5 con `UserAffinity` y `UserTagAffinity` (módulo `ranking`); fases posteriores renumeradas (+1) | Decisión del dueño: ranking personalizado por interacciones |
+| 2026-08-31 | Fase 0 implementada: `User` gana `cedula`, `username`, `role`, `bio`, `avatarKey`, `isPublic`; nuevo enum `Role`; migración `20260831000000_extend_user_identity_roles` | Cierre de la Fase 0 del `ROADMAP.md` |

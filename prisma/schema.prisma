@@ -13,11 +13,24 @@ enum FileType {
   TEXT
 }
 
+enum Role {
+  USER
+  TEACHER
+  ADMIN
+  SUPPORT
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
   passwordHash String
   name         String?
+  cedula       String   @unique
+  username     String   @unique
+  role         Role     @default(USER)
+  bio          String?
+  avatarKey    String?
+  isPublic     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

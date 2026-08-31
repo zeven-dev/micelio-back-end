@@ -21,6 +21,8 @@ describe('AuthService', () => {
   beforeEach(() => {
     usersService = {
       findByEmail: jest.fn(),
+      findByUsername: jest.fn(),
+      findByCedula: jest.fn(),
       findById: jest.fn(),
       create: jest.fn(),
     } as unknown as jest.Mocked<UsersService>;
@@ -36,6 +38,14 @@ describe('AuthService', () => {
     authService = new AuthService(usersService, jwtService, configService);
   });
 
+  const validRegisterDto = {
+    email: 'new@example.com',
+    password: 'password123',
+    name: 'Ada Lovelace',
+    username: 'ada.lovelace',
+    cedula: '1020304050',
+  };
+
   describe('register', () => {
     it('throws ConflictException when the email is already taken', async () => {
       usersService.findByEmail.mockResolvedValue({
@@ -43,29 +53,49 @@ describe('AuthService', () => {
         email: 'taken@example.com',
         passwordHash: 'hash',
         name: null,
+        role: 'USER',
       } as any);
 
       await expect(
-        authService.register({ email: 'taken@example.com', password: 'password123' }),
+        authService.register({ ...validRegisterDto, email: 'taken@example.com' }),
       ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('throws ConflictException when the username is already taken', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      usersService.findByUsername.mockResolvedValue({ id: '1' } as any);
+
+      await expect(authService.register(validRegisterDto)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('throws ConflictException when the cedula is already taken', async () => {
+      usersService.findByEmail.mockResolvedValue(null);
+      usersService.findByUsername.mockResolvedValue(null);
+      usersService.findByCedula.mockResolvedValue({ id: '1' } as any);
+
+      await expect(authService.register(validRegisterDto)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
     });
 
     it('creates the user with a hashed password and returns tokens', async () => {
       usersService.findByEmail.mockResolvedValue(null);
+      usersService.findByUsername.mockResolvedValue(null);
+      usersService.findByCedula.mockResolvedValue(null);
       usersService.create.mockResolvedValue({
         id: '1',
         email: 'new@example.com',
         passwordHash: 'hashed',
-        name: null,
+        name: 'Ada Lovelace',
+        role: 'USER',
       } as any);
 
-      const result = await authService.register({
-        email: 'new@example.com',
-        password: 'password123',
-      });
+      const result = await authService.register(validRegisterDto);
 
       expect(usersService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ email: 'new@example.com' }),
+        expect.objectContaining({ email: 'new@example.com', username: 'ada.lovelace' }),
       );
       expect(result.accessToken).toBe('signed-token');
       expect(result.refreshToken).toBe('signed-token');
@@ -89,6 +119,7 @@ describe('AuthService', () => {
         email: 'user@example.com',
         passwordHash,
         name: null,
+        role: 'USER',
       } as any);
 
       await expect(
@@ -103,6 +134,7 @@ describe('AuthService', () => {
         email: 'user@example.com',
         passwordHash,
         name: null,
+        role: 'USER',
       } as any);
 
       const result = await authService.login({

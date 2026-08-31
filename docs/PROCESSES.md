@@ -15,11 +15,11 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 ### Registro de usuario
 - **Módulos:** `src/auth`, `src/users`
 - **Disparador:** `POST /api/auth/register` (público)
-- **Pasos:** valida DTO → verifica email libre → hashea contraseña (bcrypt) → crea User →
-  emite access + refresh token (misma respuesta que login).
-- **Notas:** pendiente Fase 0: cédula + username + rol + `isPublic` (privado por defecto). El
-  refresh se entrega como cookie
-  httpOnly (web) y también en el body (móvil).
+- **Pasos:** valida DTO (email, password, name, username, cedula) → verifica email, username y
+  cedula libres → hashea contraseña (bcrypt) → crea User (`role` default `USER`, `isPublic`
+  default `false`) → emite access + refresh token (misma respuesta que login, forma sin cambios).
+- **Notas:** el refresh se entrega como cookie httpOnly (web) y también en el body (móvil). La
+  cédula nunca se devuelve en ninguna respuesta.
 
 ### Login / Refresh / Logout
 - **Módulos:** `src/auth`

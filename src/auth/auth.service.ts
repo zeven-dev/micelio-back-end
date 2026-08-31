@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -20,9 +21,17 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResponseDto & { refreshToken: string }> {
-    const existing = await this.usersService.findByEmail(dto.email);
-    if (existing) {
+    const existingEmail = await this.usersService.findByEmail(dto.email);
+    if (existingEmail) {
       throw new ConflictException('Ya existe una cuenta con ese correo electrónico');
+    }
+    const existingUsername = await this.usersService.findByUsername(dto.username);
+    if (existingUsername) {
+      throw new ConflictException('Ese username ya está en uso');
+    }
+    const existingCedula = await this.usersService.findByCedula(dto.cedula);
+    if (existingCedula) {
+      throw new ConflictException('Ya existe una cuenta con esa cédula');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
@@ -30,6 +39,8 @@ export class AuthService {
       email: dto.email,
       passwordHash,
       name: dto.name,
+      username: dto.username,
+      cedula: dto.cedula,
     });
 
     return this.buildAuthResponse(user);
@@ -88,8 +99,9 @@ export class AuthService {
     id: string;
     email: string;
     name: string | null;
+    role: Role;
   }): Promise<AuthResponseDto & { refreshToken: string }> {
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const payload: JwtPayload = { sub: user.id, email: user.email, role: user.role };
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: this.configService.get<string>('jwt.accessSecret'),

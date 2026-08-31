@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEmail, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'user@example.com' })
@@ -12,9 +12,21 @@ export class RegisterDto {
   @MaxLength(72)
   password: string;
 
-  @ApiProperty({ example: 'Ada Lovelace', required: false })
-  @IsOptional()
+  @ApiProperty({ example: 'Ada Lovelace' })
   @IsString()
+  @MinLength(1)
   @MaxLength(120)
-  name?: string;
+  name: string;
+
+  @ApiProperty({ example: 'ada.lovelace' })
+  @IsString()
+  @Matches(/^[a-z0-9_.]{3,30}$/, {
+    message: 'username debe tener 3-30 caracteres: minúsculas, dígitos, "_" o "."',
+  })
+  username: string;
+
+  @ApiProperty({ example: '1020304050', description: 'Cédula colombiana (solo dígitos)' })
+  @IsString()
+  @Matches(/^[0-9]{6,10}$/, { message: 'cedula debe tener entre 6 y 10 dígitos' })
+  cedula: string;
 }
