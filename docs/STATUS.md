@@ -20,6 +20,53 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-08-31 — Revisión de la Fase 0: cierre de huecos (tarea)
+
+Repaso de la Fase 0 ya cerrada, verificando el código contra lo que afirmaba esta bitácora. Las
+13 casillas de las tres hojas de ruta estaban efectivamente implementadas y las puertas de
+calidad pasaban. Se encontraron y corrigieron seis huecos reales:
+
+- **Listo:**
+  1. **Migración aplicable sobre datos existentes.** `20260831000000_extend_user_identity_roles`
+     agregaba `cedula`/`username` como `NOT NULL` sin relleno: fallaba con *"column contains
+     null values"* en cualquier base que ya tuviera usuarios (reproducido contra Postgres real).
+     Ahora agrega las columnas nullable, rellena las filas previas de forma determinista a
+     partir del `id` y solo entonces aplica `SET NOT NULL` + índices únicos. Verificado:
+     migra bien sobre base vacía **y** sobre base con usuarios, y
+     `prisma migrate diff` contra `schema.prisma` reporta "No difference detected".
+     Valores de relleno y sus consecuencias en `docs/DATA-MODEL.md`.
+     *Nota:* se editó una migración ya aplicada (excepción a la regla 5). Fue deliberado: una
+     migración que **falla** no se puede reparar con otra posterior, y no hay despliegue. Quien
+     tenga una base local con esta migración aplicada debe correr `prisma migrate reset`.
+  2. **`RolesGuard` ahora es fail-closed.** Antes permitía el acceso cuando la ruta no declaraba
+     `@Roles`, así que la regla 8 ("todo endpoint declara sus roles") dependía de la memoria del
+     agente — y los endpoints nuevos de la propia Fase 0 no la cumplían. Ahora una ruta que no
+     sea `@Public()` y no declare `@Roles(...)` responde `500` nombrando controlador y handler.
+     `users`, `folders`, `files` y `auth/logout` declaran `@Roles(...ALL_ROLES)`.
+  3. **Registro concurrente devuelve `409`, no `500`.** Las tres pre-consultas de unicidad son
+     TOCTOU; ahora el `P2002` de Prisma se traduce al mismo `409` por campo
+     (`AuthService.createUserOrConflict`), con specs para los tres índices.
+  4. **`GET /api/auth/me` eliminado.** Quedó con la forma anterior a la Fase 0 (sin `username`
+     ni `role`) y ningún cliente lo consumía; `GET /api/users/me` es el contrato. Registrado en
+     "Procesos eliminados" de `docs/PROCESSES.md`.
+  5. **`GET /health` eliminado.** Se registraba después de `app.listen()` y nunca respondió
+     (`404`, verificado). El health real es `GET /api/health` en `AppController`.
+  6. **Borrado del avatar anterior ahora es best-effort.** Un fallo de S3 al limpiar la key
+     vieja devolvía `500` sobre un cambio de avatar que sí se había aplicado.
+- **Verificación:** `npm run lint`, `npm run build` y `npm test` (**30 tests**, antes 24) en
+  verde. Además smoke test end-to-end con la API corriendo contra Postgres real: las 17 rutas
+  responden lo esperado con el guard fail-closed (ninguna quedó bloqueada), registro duplicado
+  da `409` con el mensaje del campo, perfil privado oculta `bio` a terceros y la muestra al
+  dueño, `cedula` y `passwordHash` nunca salen, un no-ADMIN recibe `403` y un ADMIN promueve a
+  TEACHER correctamente.
+- **Falta:** **integrar los clientes.** El back-end está en `main`, pero `micelio-front-end` y
+  `micelio-app` tienen su Fase 0 solo en rama. Hoy, `main` contra `main`, el registro está roto:
+  la API exige `cedula`/`username` y las pantallas de login de `main` no los envían.
+- **Necesito:** decisión del dueño sobre (a) integrar las ramas de los dos clientes a `main`, y
+  (b) las 6 ambigüedades de la entrada siguiente, que siguen sin revisar.
+- **Sigue:** Fase 1 del `ROADMAP.md` (`src/folders`: `parentId` para sub-carpetas; `AUDIO` en
+  `FileType`). No se empezó por decisión explícita: esta tarea era solo el repaso de la Fase 0.
+
 ### 2026-08-31 — Fase 0: identidad, roles y arquitectura (cierre de fase)
 - **Listo:**
   - `User` ampliado en `prisma/schema.prisma` con `cedula`, `username`, `role` (enum `Role`),

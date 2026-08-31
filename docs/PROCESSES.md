@@ -19,15 +19,23 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   cedula libres → hashea contraseña (bcrypt) → crea User (`role` default `USER`, `isPublic`
   default `false`) → emite access + refresh token (misma respuesta que login, forma sin cambios).
 - **Notas:** el refresh se entrega como cookie httpOnly (web) y también en el body (móvil). La
-  cédula nunca se devuelve en ninguna respuesta.
+  cédula nunca se devuelve en ninguna respuesta. Las tres verificaciones previas son solo para
+  dar el mensaje exacto por campo: entre consultar y insertar cabe otro registro, así que
+  `createUserOrConflict` traduce además el `P2002` de Prisma (violación del índice único) al
+  mismo `409` por campo. Sin eso, dos registros simultáneos con el mismo username daban `500`.
 
 ### Roles y autorización (Fase 0)
 - **Módulos:** `src/common` (decorador `@Roles` y `RolesGuard`), `src/auth` (registra el guard)
-- **Disparador:** cualquier endpoint decorado con `@Roles(...)`
+- **Disparador:** toda petición que no sea a una ruta `@Public()`
 - **Pasos:** `JwtAuthGuard` puebla `request.user` (incluye `role`, viaja en el JWT) →
-  `RolesGuard` lee los roles requeridos con `Reflector`; si no hay `@Roles` en el handler,
-  permite el acceso (compatibilidad con endpoints existentes); si los hay, exige que
-  `user.role` esté en la lista o responde `403`.
+  `RolesGuard` mira primero si la ruta es `@Public()` (pasa sin más); si no lo es, exige que
+  declare `@Roles(...)` y que `user.role` esté en la lista, o responde `403`.
+- **Fail-closed:** una ruta que no sea `@Public()` **y** no declare `@Roles(...)` se considera
+  un error de programación y responde `500` con el nombre del controlador y del handler. Así la
+  regla 8 de `AGENTS.md` ("todo endpoint declara explícitamente qué roles pueden usarlo") se
+  hace cumplir sola en vez de depender de la memoria del siguiente agente. Los endpoints
+  abiertos a cualquier sesión (`users`, `folders`, `files`, `auth/logout`) declaran
+  `@Roles(...ALL_ROLES)`, constante exportada por `src/common/decorators/roles.decorator.ts`.
 - **Notas:** ambos guards se registran como `APP_GUARD` en `src/auth/auth.module.ts`, en ese
   orden (JWT primero). Un cambio de rol se refleja en el próximo refresh de token, no de forma
   instantánea (el rol no se relee de la base de datos en cada request, por diseño: evita una
@@ -60,7 +68,9 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   (multipart), `GET /api/users/:username`
 - **Pasos:** `GET/PATCH /me` operan sobre el propio usuario del token; `PATCH /me/avatar` sube
   el archivo a S3 (prefijo `avatars/{userId}/`, tipos `image/jpeg|png|webp`, máx 5 MB) vía
-  `StorageService`, actualiza `avatarKey` y borra la key anterior si existía; `GET /:username`
+  `StorageService`, actualiza `avatarKey` y borra la key anterior si existía (ese borrado es
+  limpieza *best-effort*: si S3 falla, se registra un warning y la key queda huérfana, en vez de
+  responder `500` sobre un cambio de avatar que sí se aplicó); `GET /:username`
   busca por username y aplica visibilidad: dueño o perfil público → `UserPublic` completo (con
   `bio`); en cualquier otro caso, `UserPublic` limitado (sin `bio`, sin `feedSettings`).
 - **Notas (desviaciones documentadas, ver `STATUS.md`):** `followersCount`, `followingCount`,
@@ -104,4 +114,16 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 
 ## Procesos eliminados
 
-*(vacío)*
+### `GET /api/auth/me` — perfil de la sesión (eliminado en la revisión de la Fase 0)
+- **Vivía en:** `src/auth/auth.controller.ts` + `AuthService.me()`
+- **Qué hacía:** devolvía `{ id, email, name }` del usuario del token.
+- **Motivo:** quedó con la forma anterior a la Fase 0 (sin `username` ni `role`) y ningún
+  cliente lo consumía. `GET /api/users/me` lo reemplaza con la forma `Me` de
+  `API-CONTRACTS.md`. Mantener dos perfiles de sesión con formas distintas contradice la regla
+  12 ("consistencia con los clientes"). `auth` queda solo con el ciclo de vida de los tokens.
+
+### `GET /health` — health check suelto (eliminado en la revisión de la Fase 0)
+- **Vivía en:** `src/main.ts`, registrado con `app.getHttpAdapter().get()`
+- **Motivo:** se registraba **después** de `app.listen()` y nunca llegó a responder (devolvía
+  `404`, verificado). El health check real es `GET /api/health` en `AppController`, marcado
+  `@Public()`. Se eliminó para no anunciar un endpoint inexistente a un balanceador.
