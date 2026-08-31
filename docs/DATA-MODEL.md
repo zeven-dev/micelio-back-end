@@ -33,6 +33,22 @@ Relaciones: `1—N Folder`.
 
 Migración: `20260831000000_extend_user_identity_roles`.
 
+**Relleno de usuarios anteriores a la Fase 0.** `cedula` y `username` son `NOT NULL` + únicos,
+pero la tabla ya existía desde `20260826000000_init`. La migración por tanto agrega ambas
+columnas *nullable*, rellena las filas previas y solo entonces aplica `SET NOT NULL` y los
+índices únicos. Sin ese orden, la migración aborta con *"column contains null values"* en
+cualquier base que ya tenga usuarios. Los valores de relleno se derivan del `id` (uuid), así
+que son deterministas y únicos:
+
+| Campo | Valor de relleno | Consecuencia |
+| --- | --- | --- |
+| `username` | `u_` + 28 hex del id | Cumple `^[a-z0-9_.]{3,30}$`; el usuario puede cambiarlo después |
+| `cedula` | `PENDIENTE-` + 32 hex del id | **No** cumple `^[0-9]{6,10}$`: es imposible confundirlo con una cédula real, y marca a quién hay que volver a pedírsela |
+
+Ningún flujo actual vuelve a capturar la cédula (`PATCH /api/users/me` no la acepta). Si alguna
+base productiva llega a tener filas `PENDIENTE-*`, hace falta un flujo de recaptura — hoy no
+existe porque no hay despliegue.
+
 ### Enum Role (Fase 0)
 `USER | TEACHER | ADMIN | SUPPORT`. Viaja en el JWT (access y refresh) para que `RolesGuard`
 no necesite una consulta a base de datos por request; un cambio de rol se refleja en el
