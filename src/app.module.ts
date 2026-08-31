@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin/admin.module';
 import { AppController } from './app.controller';
 import { AuthModule } from './auth/auth.module';
 import configuration from './config/configuration';
@@ -19,6 +21,7 @@ import { UsersModule } from './users/users.module';
       load: [configuration],
       validationSchema: envValidationSchema,
     }),
+    EventEmitterModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     PrismaModule,
     StorageModule,
@@ -26,6 +29,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     FoldersModule,
     FilesModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

@@ -77,18 +77,19 @@ sincronizadas.
 | --- | --- | --- |
 | `src/auth` | Registro, login, refresh, logout; estrategias y guards JWT | [`src/auth/AGENTS.md`](src/auth/AGENTS.md) |
 | `src/users` | Acceso a datos de usuario | [`src/users/AGENTS.md`](src/users/AGENTS.md) |
+| `src/admin` | Germen de administración: asignación de roles | [`src/admin/AGENTS.md`](src/admin/AGENTS.md) |
 | `src/folders` | CRUD de carpetas (proyectos) por usuario | [`src/folders/AGENTS.md`](src/folders/AGENTS.md) |
 | `src/files` | Subida/listado/borrado de archivos dentro de carpetas | [`src/files/AGENTS.md`](src/files/AGENTS.md) |
 | `src/storage` | Abstracción de almacenamiento (interfaz + S3) | [`src/storage/AGENTS.md`](src/storage/AGENTS.md) |
 | `src/prisma` | Cliente Prisma como módulo global | [`src/prisma/AGENTS.md`](src/prisma/AGENTS.md) |
-| `src/common` | Filtros, interceptores y decoradores transversales | [`src/common/AGENTS.md`](src/common/AGENTS.md) |
+| `src/common` | Filtros, interceptores, guards y decoradores transversales | [`src/common/AGENTS.md`](src/common/AGENTS.md) |
 | `src/config` | Configuración tipada y validación de entorno | [`src/config/AGENTS.md`](src/config/AGENTS.md) |
 
 Módulos futuros planificados (ver `docs/ROADMAP.md` y `docs/ARCHITECTURE.md`): `events`
 (contratos de eventos de dominio), `posts` (publicaciones + feed), `social` (follows/favoritos,
 visibilidad, likes, saves, comentarios), `ranking` (afinidad y ranking personalizado, solo
 eventos), `chat` (WebSockets), `notifications` (**extraíble**), `market`, `search`, `groups`
-(profesores), `admin`.
+(profesores). `admin` se amplía en la Fase 11 (hoy solo tiene el endpoint de rol).
 
 ## Comandos
 

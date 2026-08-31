@@ -7,9 +7,11 @@
 - `interceptors/transform.interceptor.ts` — envoltura uniforme de respuestas.
 - `decorators/public.decorator.ts` — marca endpoints públicos (excepción al guard JWT global).
 - `decorators/current-user.decorator.ts` — inyecta el usuario autenticado.
-
-## Pendiente (Fase 0)
-- `@Roles(...)` + `RolesGuard` para los 4 tipos de usuario.
+- `decorators/roles.decorator.ts` — `@Roles(...Role[])`, guarda metadata `ROLES_KEY`.
+- `guards/roles.guard.ts` — `RolesGuard`: sin `@Roles` en el handler, permite el acceso; con
+  `@Roles`, exige que `request.user.role` esté en la lista o responde `403`. Se registra como
+  `APP_GUARD` en `src/auth/auth.module.ts`, **después** de `JwtAuthGuard` (necesita
+  `request.user` ya poblado).
 
 ## Reglas del módulo
 - Solo entra aquí lo verdaderamente transversal; si algo pertenece a un dominio, va a su módulo.
