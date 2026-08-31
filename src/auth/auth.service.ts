@@ -1,9 +1,9 @@
 import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Role } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import { UsersService } from '../users/users.service';
+import { CreateUserData, UsersService } from '../users/users.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -11,6 +11,13 @@ import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 const SALT_ROUNDS = 12;
+
+/** Mensaje de conflicto por campo único del registro: mismo texto en la pre-consulta y en P2002. */
+const UNIQUE_FIELD_MESSAGES = {
+  email: 'Ya existe una cuenta con ese correo electrónico',
+  username: 'Ese username ya está en uso',
+  cedula: 'Ya existe una cuenta con esa cédula',
+} as const;
 
 @Injectable()
 export class AuthService {
@@ -23,19 +30,19 @@ export class AuthService {
   async register(dto: RegisterDto): Promise<AuthResponseDto & { refreshToken: string }> {
     const existingEmail = await this.usersService.findByEmail(dto.email);
     if (existingEmail) {
-      throw new ConflictException('Ya existe una cuenta con ese correo electrónico');
+      throw new ConflictException(UNIQUE_FIELD_MESSAGES.email);
     }
     const existingUsername = await this.usersService.findByUsername(dto.username);
     if (existingUsername) {
-      throw new ConflictException('Ese username ya está en uso');
+      throw new ConflictException(UNIQUE_FIELD_MESSAGES.username);
     }
     const existingCedula = await this.usersService.findByCedula(dto.cedula);
     if (existingCedula) {
-      throw new ConflictException('Ya existe una cuenta con esa cédula');
+      throw new ConflictException(UNIQUE_FIELD_MESSAGES.cedula);
     }
 
     const passwordHash = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    const user = await this.usersService.create({
+    const user = await this.createUserOrConflict({
       email: dto.email,
       passwordHash,
       name: dto.name,
@@ -44,6 +51,31 @@ export class AuthService {
     });
 
     return this.buildAuthResponse(user);
+  }
+
+  /**
+   * Las tres consultas de `register` son una comodidad para dar el mensaje exacto,
+   * pero entre consultar y insertar cabe otro registro: el índice único de la base
+   * es la garantía real, así que su violación (P2002) devuelve el mismo 409 y no un 500.
+   */
+  private async createUserOrConflict(data: CreateUserData) {
+    try {
+      return await this.usersService.create(data);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // `meta.target` es el nombre del índice en Postgres (p. ej. `users_username_key`).
+        const target = Array.isArray(error.meta?.target)
+          ? error.meta.target.join(',')
+          : String(error.meta?.target ?? '');
+        const field = (
+          Object.keys(UNIQUE_FIELD_MESSAGES) as Array<keyof typeof UNIQUE_FIELD_MESSAGES>
+        ).find((key) => target.includes(key));
+        throw new ConflictException(
+          field ? UNIQUE_FIELD_MESSAGES[field] : 'Ya existe una cuenta con esos datos',
+        );
+      }
+      throw error;
+    }
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto & { refreshToken: string }> {
@@ -66,14 +98,6 @@ export class AuthService {
       throw new UnauthorizedException();
     }
     return this.buildAuthResponse(fullUser);
-  }
-
-  async me(user: AuthenticatedUser) {
-    const fullUser = await this.usersService.findById(user.id);
-    if (!fullUser) {
-      throw new UnauthorizedException();
-    }
-    return { id: fullUser.id, email: fullUser.email, name: fullUser.name };
   }
 
   getRefreshCookieOptions() {

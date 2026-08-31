@@ -4,13 +4,18 @@
 
 ## Contrato actual
 - `POST /api/auth/register` (público) — `email, password, name, username, cedula`. Verifica que
-  email, username y cedula estén libres antes de crear el usuario (`409` si no).
+  email, username y cedula estén libres antes de crear el usuario (`409` con el mensaje del
+  campo). Esa verificación previa es solo para el mensaje: la garantía real es el índice único,
+  cuyo `P2002` se traduce al mismo `409` (`createUserOrConflict`), de modo que dos registros
+  simultáneos con el mismo dato dan `409` y no `500`.
 - `POST /api/auth/login` (público) — devuelve `accessToken` + refresh (cookie httpOnly para web
   **y** en el body para móvil).
 - `POST /api/auth/refresh` — acepta cookie o refresh token en body (`jwt-refresh.strategy`).
 - `POST /api/auth/logout` — limpia la cookie.
-- `GET /api/auth/me` — endpoint preexistente, forma sin cambios (`{id, email, name}`); el perfil
-  completo (`Me` de `API-CONTRACTS.md`) vive en `GET /api/users/me` (módulo `users`, Fase 0).
+
+`auth` solo maneja el ciclo de vida de los tokens. El perfil de la sesión es `GET /api/users/me`
+(módulo `users`); el antiguo `GET /api/auth/me` se eliminó en la revisión de la Fase 0 por
+devolver una forma anterior al contrato — ver "Procesos eliminados" en `docs/PROCESSES.md`.
 
 ## Piezas
 - `strategies/jwt-access.strategy.ts` — valida el access token (guard global).

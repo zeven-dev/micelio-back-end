@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
@@ -100,6 +101,43 @@ describe('AuthService', () => {
       expect(result.accessToken).toBe('signed-token');
       expect(result.refreshToken).toBe('signed-token');
       expect(result.user.email).toBe('new@example.com');
+    });
+
+    // Carrera real: las pre-consultas pasan y otro registro se cuela antes del insert,
+    // así que el índice único de la base es quien rechaza. Debe seguir siendo un 409.
+    describe('when the unique index rejects the insert (concurrent register)', () => {
+      function duplicateKeyError(indexName: string) {
+        return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
+          code: 'P2002',
+          clientVersion: 'test',
+          meta: { target: [indexName] },
+        });
+      }
+
+      beforeEach(() => {
+        usersService.findByEmail.mockResolvedValue(null);
+        usersService.findByUsername.mockResolvedValue(null);
+        usersService.findByCedula.mockResolvedValue(null);
+      });
+
+      it.each([
+        ['users_email_key', 'Ya existe una cuenta con ese correo electrónico'],
+        ['users_username_key', 'Ese username ya está en uso'],
+        ['users_cedula_key', 'Ya existe una cuenta con esa cédula'],
+      ])('maps %s to a 409 naming the field', async (indexName, message) => {
+        usersService.create.mockRejectedValue(duplicateKeyError(indexName));
+
+        await expect(authService.register(validRegisterDto)).rejects.toMatchObject({
+          status: 409,
+          message,
+        });
+      });
+
+      it('rethrows errors that are not unique-constraint violations', async () => {
+        usersService.create.mockRejectedValue(new Error('la base se cayó'));
+
+        await expect(authService.register(validRegisterDto)).rejects.toThrow('la base se cayó');
+      });
     });
   });
 
