@@ -60,7 +60,7 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 
 ### Enum FileType
 `IMAGE | VIDEO | TEXT`. Se ampliará con `AUDIO` en la Fase 1 (biblioteca completa); el chat
-(Fase 5) decidirá si comparte el enum o define el suyo.
+(Fase 6) decidirá si comparte el enum o define el suyo.
 
 ---
 
@@ -79,8 +79,11 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
   (endpoint de admin); en el futuro será automático vía contraste con la universidad.
 
 ### Fase 2 — Publicaciones y feed propio
-- **Post**: `id, authorId → User, description, position (orden en el feed del autor),
-  createdAt/updatedAt`. Una publicación agrupa 1..N medios.
+- **Post**: `id, authorId → User, description, tags String[] (máx 10, normalizadas por el
+  servidor — reglas exactas en `API-CONTRACTS.md`; índice GIN para búsqueda y afinidad),
+  position (orden en el feed del autor), createdAt/updatedAt`. Una publicación agrupa 1..N
+  medios. *Por qué tags como arreglo y no tabla:* no hay metadatos por etiqueta; Postgres +
+  GIN cubren búsqueda y conteo sin joins.
 - **PostMedia**: `id, postId → Post, fileAssetId → FileAsset, order`. Une publicación con
   archivos de biblioteca (no se duplica el binario). Borrar un FileAsset usado por un Post debe
   bloquearse o marcarse (decisión al implementar; documentarla aquí).
@@ -105,7 +108,18 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 - **SavedPost**: `id, postId, userId, createdAt` único (postId, userId) — guardados.
 - **Comment**: `id, postId, authorId, body, createdAt`. (Respuestas anidadas: pregunta abierta.)
 
-### Fase 5 — Chat
+### Fase 5 — Afinidad y ranking (módulo `ranking`)
+- **UserAffinity**: `id, userId → User, targetUserId → User, score Float @default(0),
+  updatedAt`, único (userId, targetUserId). Afinidad de un usuario hacia otro, acumulada por
+  likes/comentarios/guardados/compartidos con pesos fijos y vida media de 90 días — señales,
+  pesos y fórmula de decaimiento exactos en `API-CONTRACTS.md` ("Afinidad y ranking").
+- **UserTagAffinity**: `id, userId → User, tag String, score Float @default(0), updatedAt`,
+  único (userId, tag). Afinidad hacia etiquetas.
+- Ambas tablas se escriben **solo** desde los listeners de eventos del módulo `ranking`;
+  ningún otro módulo las toca. *Por qué:* alimentan el feed v2, el explore y el orden de
+  búsqueda sin ML y sin jobs de mantenimiento.
+
+### Fase 6 — Chat
 - **Conversation**: `id, createdAt` (1 a 1 inicialmente; grupos de chat: pregunta abierta).
 - **ConversationParticipant**: `conversationId, userId, lastReadAt`.
 - **Message**: `id, conversationId, senderId, type (TEXT|IMAGE|VIDEO|AUDIO), body?,
@@ -113,21 +127,21 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 - **ChatAttachment**: `id, key S3, mimeType, size` — **separado de FileAsset** a propósito:
   los archivos de chat no aparecen en la biblioteca de publicaciones.
 
-### Fase 6 — Notificaciones (módulo extraíble)
+### Fase 7 — Notificaciones (módulo extraíble)
 - **Notification** (tabla `notification_items`, prefijo propio): `id, recipientId,
   type (MESSAGE|COMMENT|LIKE|POST|FOLLOW), actorId?, postId?, messageId?, payload Json,
   readAt?, createdAt`. **Sin FKs hacia otros dominios** (ids "en frío" + payload denormalizado)
   — decisión de arquitectura para que el módulo sea extraíble a microservicio; ver
   `docs/ARCHITECTURE.md`.
 
-### Fase 7 — Mercado
+### Fase 8 — Mercado
 - **MarketItem**: `id, sellerId → User, title, description, category (enum MarketCategory),
   price?, currency?, mediaKey/media relation, active, createdAt/updatedAt`. Sin pagos en esta
-  fase (los pagos llegan en la Fase 11 con su propia entidad de órdenes; se diseñará entonces).
+  fase (los pagos llegan en la Fase 12 con su propia entidad de órdenes; se diseñará entonces).
 - **enum MarketCategory**: `SERVICE | ARTWORK | EVENT | RESOURCE` (ampliable).
 - Compartir en feed: un Post puede referenciar `marketItemId?` (el usuario decide compartirlo).
 
-### Fase 9 — Grupos de profesores
+### Fase 10 — Grupos de profesores
 - **Group**: `id, teacherId → User(role TEACHER), name, description?, createdAt`.
 - **GroupMember**: `groupId, userId, joinedAt`.
 - **GroupFolder**: `id, groupId, name` — carpeta de curso donde los alumnos entregan.
@@ -135,11 +149,11 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
   entregado queda en la biblioteca del alumno (FileAsset suyo); él decide si además lo publica.
 - **Grade**: `id, submissionId único, teacherId, score, feedback?, gradedAt`.
 
-### Fase 10 — Soporte
+### Fase 11 — Soporte
 - **SupportGrant** (nombre tentativo): permisos de visualización que el ADMIN delega a un
   SUPPORT: `id, supportUserId, scope, grantedById, createdAt`. Alcance por definir.
 
-### Fase 11 — Futuro (diseñar al llegar)
+### Fase 12 — Futuro (diseñar al llegar)
 - Órdenes/pagos del market (proveedor detrás de interfaz, ver `ARCHITECTURE.md`).
 - Validación de cédula y rol profesor contra bases de datos de la Universidad de Antioquia.
 
@@ -151,3 +165,4 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 | --- | --- | --- |
 | 2026-08-31 | Documento creado con el modelo actual (User, Folder, FileAsset) y el objetivo | Punto de partida de la documentación del proyecto |
 | 2026-08-31 | Modelo objetivo ampliado: `isPublic` (privado por defecto), `Follow` con favoritos, ajustes de feed (layout/columnas/espaciado), likes con lista visible al dueño, `Notification` sin FKs (extraíble), fases renumeradas | Decisiones del dueño del producto (ver `PRODUCT.md`) |
+| 2026-08-31 | `tags` en Post; nueva Fase 5 con `UserAffinity` y `UserTagAffinity` (módulo `ranking`); fases posteriores renumeradas (+1) | Decisión del dueño: ranking personalizado por interacciones |

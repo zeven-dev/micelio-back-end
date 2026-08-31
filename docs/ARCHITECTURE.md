@@ -25,10 +25,11 @@ aislados, infraestructura intercambiable — se logra con las reglas de abajo.
    Cruce de dominios solo por: (a) el servicio público exportado del otro módulo, o (b) eventos
    de dominio.
 3. **Eventos de dominio como columna vertebral.** Se usa `@nestjs/event-emitter`. Toda acción
-   relevante emite un evento tipado (`post.liked`, `comment.created`, `message.sent`,
-   `post.created`, `user.followed`…) definido en `src/events/` (contratos compartidos, sin
-   lógica). *Por qué:* desacopla productores de consumidores y hace extraíbles los módulos que
-   solo consumen eventos (notificaciones).
+   relevante emite un evento tipado (`post.liked`, `post.unliked`, `comment.created`,
+   `post.saved`, `post.unsaved`, `post.shared`, `message.sent`, `post.created`,
+   `user.followed`…) definido en `src/events/` (contratos compartidos, sin lógica). *Por qué:*
+   desacopla productores de consumidores y hace posibles los módulos que solo consumen eventos
+   (`notifications`, `ranking`).
 4. **Infraestructura detrás de interfaces.** Todo servicio externo se abstrae como el actual
    `StorageService` (interfaz + implementación): futuro proveedor de pagos, futura validación
    contra la base de datos de la Universidad de Antioquia. Cambiar de proveedor no debe tocar
@@ -59,6 +60,8 @@ Reglas específicas:
 src/
   events/          # contratos de eventos de dominio (tipos + nombres), sin lógica
   auth/ users/ folders/ files/ posts/ social/ chat/ market/ search/ groups/ admin/
+  ranking/         # afinidad y ranking: escribe sus tablas SOLO desde listeners de eventos;
+                   # expone RankingService de lectura (effA/effT) para feed/explore/búsqueda
   notifications/   # módulo extraíble (reglas especiales arriba)
   storage/ prisma/ common/ config/
 ```

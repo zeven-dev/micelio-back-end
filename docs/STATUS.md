@@ -20,6 +20,18 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-08-31 — Ranking personalizado y etiquetas especificados (tarea)
+- **Listo:** decisión del dueño incorporada: afinidad usuario→usuario y usuario→etiqueta con
+  pesos fijos (like +1, comentario +2, guardado +3, compartido +2) y vida media de 90 días,
+  feed v2, `GET /api/explore` y orden de búsqueda por afinidad — todo exacto en
+  `API-CONTRACTS.md`. Nuevo módulo `ranking` en `ARCHITECTURE.md` y `DATA-MODEL.md`
+  (`UserAffinity`, `UserTagAffinity`); `tags` en Post. Nueva Fase 5 en `ROADMAP.md`; fases
+  posteriores renumeradas (chat 6, notificaciones 7, market 8, búsqueda/explore 9, grupos 10,
+  admin 11, futuro 12).
+- **Falta:** nada de esta tarea; el desarrollo sigue sin empezar (Fase 0).
+- **Necesito:** nada nuevo.
+- **Sigue:** Fase 0 del `ROADMAP.md`.
+
 ### 2026-08-31 — Cierre de huecos de especificación (tarea)
 - **Listo:** `docs/API-CONTRACTS.md` nuevo: convenciones (envelope, cursor, ISO), formas
   exactas de UserPublic/Me/Post/Comment/Notification/MarketItem/Conversation/Message,

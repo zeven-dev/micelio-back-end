@@ -86,8 +86,9 @@ sincronizadas.
 
 Módulos futuros planificados (ver `docs/ROADMAP.md` y `docs/ARCHITECTURE.md`): `events`
 (contratos de eventos de dominio), `posts` (publicaciones + feed), `social` (follows/favoritos,
-visibilidad, likes, saves, comentarios), `chat` (WebSockets), `notifications` (**extraíble**),
-`market`, `search`, `groups` (profesores), `admin`.
+visibilidad, likes, saves, comentarios), `ranking` (afinidad y ranking personalizado, solo
+eventos), `chat` (WebSockets), `notifications` (**extraíble**), `market`, `search`, `groups`
+(profesores), `admin`.
 
 ## Comandos
 

@@ -74,6 +74,8 @@ estar muy bien optimizada para móvil.
 
 ### Publicaciones e interacciones
 - Publicaciones con descripción, a partir de medios de la biblioteca.
+- **Etiquetas** por publicación (máx 10): explícitas y/o `#hashtags` en la descripción.
+  Alimentan la búsqueda y el ranking personalizado.
 - **Likes**: se cuentan y almacenan; el **dueño de la publicación ve el número y quiénes**
   dieron like. Para el resto de usuarios no son visibles.
 - **Comentarios** en publicaciones.
@@ -83,6 +85,10 @@ estar muy bien optimizada para móvil.
 ### Home
 - Espacio tipo Instagram/Tumblr con publicaciones de los usuarios: alimentado por los
   **seguidos** (con prioridad a los **favoritos**) + descubrimiento de perfiles públicos.
+- **Ranking personalizado por interacciones:** si X da likes, comenta, guarda o comparte
+  contenido de Y — lo siga o no —, Y gana relevancia en el home de X; igual con las etiquetas
+  con las que X interactúa mucho o muy seguido. Sin ML: pesos fijos y decaimiento (vida media
+  90 días). Especificación exacta en `micelio-back-end/docs/API-CONTRACTS.md`.
 
 ### Chat
 - Mensajería entre usuarios: texto, imágenes, audios y videos (implica **sockets**).
@@ -106,9 +112,13 @@ estar muy bien optimizada para móvil.
   `recurso`, etc., para permitir filtros en la búsqueda.
 
 ### Búsqueda
-- Búsqueda de **usuarios** (por username/nombre) y de **palabras clave** en publicaciones.
+- Búsqueda de **usuarios** (por username/nombre) y de **palabras clave** en descripciones y
+  etiquetas de publicaciones.
 - La sección de búsqueda (como la de Instagram) también muestra los ítems del market, filtrables
   por categoría.
+- **Explore:** antes de escribir, la sección muestra una cuadrícula de descubrimiento
+  personalizada por la afinidad de cada usuario (autores y etiquetas con los que interactúa).
+  El orden de los resultados de búsqueda también usa esa afinidad.
 
 ### Grupos de profesores
 - El profesor crea grupos, agrega usuarios, crea carpetas de curso.
@@ -144,6 +154,10 @@ El diseño debe quedar centralizado en tokens para que un ajuste grande sea triv
    **1 a 6 columnas**, **espaciado configurable**.
 8. **Rol profesor:** lo otorga el administrador; en el futuro será automático al contrastar con
    la base de datos de la universidad.
+9. **Ranking personalizado:** las interacciones (likes, comentarios, guardados, compartidos)
+   aumentan la relevancia del autor y de las etiquetas para quien interactúa — en el home, el
+   explore y la búsqueda. Contadores con pesos y decaimiento, sin ML; los posts llevan
+   etiquetas para habilitarlo.
 
 ## Preguntas abiertas (pendientes del dueño del producto)
 
