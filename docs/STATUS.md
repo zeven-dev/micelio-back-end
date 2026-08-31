@@ -20,6 +20,64 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-08-31 — Fase 0: identidad, roles y arquitectura (cierre de fase)
+- **Listo:**
+  - `User` ampliado en `prisma/schema.prisma` con `cedula`, `username`, `role` (enum `Role`),
+    `bio`, `avatarKey`, `isPublic`; migración `20260831000000_extend_user_identity_roles`
+    aplicada. `docs/DATA-MODEL.md` actualizado.
+  - `POST /api/auth/register` ahora exige `cedula`, `username` además de `name` (antes
+    opcional); valida unicidad de los tres campos con `409` específico por campo
+    (`src/auth/dto/register.dto.ts`, `src/auth/auth.service.ts`).
+  - `@Roles(...)` + `RolesGuard` en `src/common` (`decorators/roles.decorator.ts`,
+    `guards/roles.guard.ts`), registrado como `APP_GUARD` global en
+    `src/auth/auth.module.ts` justo después de `JwtAuthGuard`. El rol viaja en el JWT
+    (`JwtPayload`/`AuthenticatedUser` ganan `role`) para no consultar la base de datos en cada
+    request.
+  - `PATCH /api/admin/users/:id/role` (`@Roles(ADMIN)`) — módulo nuevo `src/admin` (germen,
+    ver su `AGENTS.md`).
+  - `@nestjs/event-emitter` instalado y registrado global (`EventEmitterModule.forRoot()` en
+    `AppModule`); `src/events/domain-events.ts` con nombres y payloads de los 9 eventos de
+    `ARCHITECTURE.md`. Sin productores/consumidores todavía (scaffold puro).
+  - `GET/PATCH /api/users/me`, `PATCH /api/users/me/avatar` (multipart, S3 vía
+    `StorageService`), `GET /api/users/:username` — módulo `users` (`users.controller.ts`,
+    `users.service.ts`).
+  - Verificación: `npm run lint` (sin errores), `npm run build` (sin errores),
+    `npm test` (4 suites, 24 tests, todos en verde). Además smoke test manual end-to-end con el
+    servidor corriendo contra Postgres real: registro de 2 usuarios, colisión de email/username
+    (`409`), perfil privado por defecto (oculta `bio` a terceros), `PATCH /users/me`
+    (`isPublic:true`) revela `bio` a terceros, `RolesGuard` responde `403` a un no-ADMIN, y un
+    ADMIN promueve a otro usuario a `TEACHER` correctamente.
+- **Ambigüedades reales resueltas (elegida la opción más simple compatible con las specs):**
+  1. **Formato de `username`:** ninguna doc fijaba el patrón exacto. Elegido
+     `^[a-z0-9_.]{3,30}$` (minúsculas, dígitos, `_`, `.`). Si el dueño del producto quiere otro
+     formato (mayúsculas visibles, guiones, longitud distinta), es un cambio de una sola
+     validación en `register.dto.ts`.
+  2. **Formato de `cedula`:** la spec solo pide "formato básico de dígitos". Elegido
+     `^[0-9]{6,10}$` (rango típico de cédulas colombianas, sin dígito de verificación).
+  3. **`UserPublic.followersCount/followingCount/viewerFollows/followsViewer`:** el contrato ya
+     los define, pero `Follow` no existe hasta la Fase 3. Se devuelven `0`/`false` — es el valor
+     real hoy (no hay follows), no un placeholder inventado. Se actualizará solo cuando exista
+     `social`.
+  4. **`UserPublic.feedSettings`:** depende de columnas que llegan en la Fase 2
+     (`feedLayout/feedColumns/feedGap`). Se **omite** del todo en vez de inventar valores por
+     defecto no persistidos, para no mentir sobre datos que el usuario no ha configurado.
+  5. **`GET /api/users/:username`, ¿público o autenticado?** Ninguna doc lo especifica. Elegido
+     autenticado (no `@Public()`), consistente con la regla "todo endpoint es privado por
+     defecto" de `AGENTS.md`. Fácil de revertir si el producto quiere perfiles públicos
+     navegables sin sesión.
+  6. **`PATCH /api/users/me/avatar` vs. avatar dentro de `PATCH /api/users/me`:** el `ROADMAP.md`
+     decía "avatar vía StorageService" dentro de la tarea de perfil, pero `API-CONTRACTS.md` ya
+     especifica el endpoint separado (`PATCH /api/users/me/avatar`, multipart) — se implementó
+     el contrato exacto, no la redacción suelta del roadmap.
+- **Falta:** nada de la Fase 0. Fase 1 (sub-carpetas, `AUDIO`) no ha empezado.
+- **Necesito:** que el dueño del producto revise las 6 ambigüedades resueltas arriba,
+  especialmente el formato de `username`/`cedula` y si el perfil público debe ser navegable sin
+  sesión.
+- **Sigue:** Fase 1 del `ROADMAP.md` (`src/folders`: `parentId` para sub-carpetas; `AUDIO` en
+  `FileType`). El front-end y la app pueden empezar su propia Fase 0 ya mismo: login/registro
+  con los campos nuevos, pantalla de perfil (`GET/PATCH /api/users/me`, avatar, toggle
+  público/privado) y perfil público limitado.
+
 ### 2026-08-31 — Ranking personalizado y etiquetas especificados (tarea)
 - **Listo:** decisión del dueño incorporada: afinidad usuario→usuario y usuario→etiqueta con
   pesos fijos (like +1, comentario +2, guardado +3, compartido +2) y vida media de 90 días,

@@ -14,21 +14,21 @@ sigue). Commits cortos de una línea. Respetar `ARCHITECTURE.md` siempre.
 implementar exactamente eso, sin inventar formas; si un contrato cambia, se actualiza allí en
 la misma tarea.
 
-## Fase 0 — Identidad, roles y arquitectura
-- [ ] **Ampliar User**: `cedula` (única, formato colombiano — validar solo formato básico de
+## Fase 0 — Identidad, roles y arquitectura — **cerrada 2026-08-31**
+- [x] **Ampliar User**: `cedula` (única, formato colombiano — validar solo formato básico de
   dígitos, sin contraste externo), `username` (único), `role` (enum `USER|TEACHER|ADMIN|
   SUPPORT`), `bio`, `avatarKey`, `isPublic` (default `false`). *Dónde:* `prisma/schema.prisma`,
   DTO de registro en `src/auth`, `src/users`. *Por qué:* registro exige cédula, nombre,
   username, contraseña y correo; los roles y la privacidad cuelgan de aquí.
-- [ ] **Guard de roles**: `@Roles(...)` + `RolesGuard` en `src/common`. Todo endpoint nuevo
+- [x] **Guard de roles**: `@Roles(...)` + `RolesGuard` en `src/common`. Todo endpoint nuevo
   declara roles explícitos desde ahora.
-- [ ] **Asignación de rol profesor**: `PATCH /api/admin/users/:id/role` solo ADMIN (germen del
+- [x] **Asignación de rol profesor**: `PATCH /api/admin/users/:id/role` solo ADMIN (germen del
   módulo `admin`). *Por qué:* decidido — el admin otorga TEACHER; la automatización con la
   Universidad de Antioquia llega en Fase 12.
-- [ ] **Eventos de dominio**: instalar `@nestjs/event-emitter`, crear `src/events/` con los
+- [x] **Eventos de dominio**: instalar `@nestjs/event-emitter`, crear `src/events/` con los
   contratos base (ver `ARCHITECTURE.md`). *Por qué:* columna vertebral de la integración entre
   módulos y de las notificaciones extraíbles.
-- [ ] **Perfil**: `GET/PATCH /api/users/me` (bio, nombre, avatar vía `StorageService`,
+- [x] **Perfil**: `GET/PATCH /api/users/me` (bio, nombre, avatar vía `StorageService`,
   **toggle `isPublic`**) y `GET /api/users/:username` (perfil público / limitado si privado).
 
 ## Fase 1 — Biblioteca completa
