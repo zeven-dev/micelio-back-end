@@ -20,6 +20,17 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-08-31 — Cierre de huecos de especificación (tarea)
+- **Listo:** `docs/API-CONTRACTS.md` nuevo: convenciones (envelope, cursor, ISO), formas
+  exactas de UserPublic/Me/Post/Comment/Notification/MarketItem/Conversation/Message,
+  contratos finos (reorder, feedSettings, likes, follows, search) y el **algoritmo determinista
+  del home feed** (streams S/D, boost 12 h a favoritos, mezcla 4:1, cursor doble). ROADMAP,
+  DATA-MODEL y AGENTS.md enlazados a él.
+- **Falta:** nada de esta tarea; el desarrollo sigue sin empezar (Fase 0).
+- **Necesito:** nada; las preguntas abiertas de `PRODUCT.md` siguen sin bloquear Fases 0–8.
+- **Sigue:** Fase 0 del `ROADMAP.md`. Todo endpoint nuevo debe implementar la forma exacta de
+  `API-CONTRACTS.md`.
+
 ### 2026-08-31 — Documentación y decisiones de producto (cierre de preparación)
 - **Listo:** `AGENTS.md` raíz y por módulo; `docs/PRODUCT.md` (canónico, con decisiones del
   dueño), `docs/DATA-MODEL.md` (modelo actual + objetivo por fases), `docs/PROCESSES.md`

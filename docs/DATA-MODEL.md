@@ -86,7 +86,8 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
   bloquearse o marcarse (decisión al implementar; documentarla aquí).
 - **Ajustes de presentación del feed** (en User o tabla 1–1 `FeedSettings`, decidir al
   implementar y documentar): `feedLayout (enum GRID | MASONRY)`, `feedColumns Int` (1–6),
-  `feedGap Int` (paso de espaciado en tokens de diseño). *Por qué:* el dueño elige cuadrícula o
+  `feedGap Int` (índice 0–5 en la escala de espaciado del design system; ver
+  `API-CONTRACTS.md`). *Por qué:* el dueño elige cuadrícula o
   masonry, cuántas columnas y el espaciado entre publicaciones; los visitantes ven el feed como
   el dueño lo curó.
 

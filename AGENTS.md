@@ -20,6 +20,7 @@ sincronizadas.
 | [`docs/STATUS.md`](docs/STATUS.md) | Bitácora: descarga de conocimiento por tarea/fase | **Al terminar cada tarea y cada fase** |
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | Todas las entidades: actuales y objetivo, con relaciones y razones | **Siempre** que se toque `prisma/schema.prisma` |
 | [`docs/PROCESSES.md`](docs/PROCESSES.md) | Registro de procesos: qué hacen, dónde viven, por qué existen | **Siempre** que se cree, modifique o elimine un proceso/flujo |
+| [`docs/API-CONTRACTS.md`](docs/API-CONTRACTS.md) | Formas exactas de peticiones/respuestas y algoritmo del feed | **Siempre** que se cree o cambie un contrato de endpoint |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Lista de tareas por fases: qué hacer, cómo, por qué y dónde | Al completar o replantear una tarea |
 | `src/<módulo>/AGENTS.md` | Contrato y lineamientos del módulo | Al terminar cualquier tarea que toque el módulo |
 

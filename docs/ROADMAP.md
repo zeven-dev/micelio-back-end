@@ -10,6 +10,10 @@ en `PRODUCT.md`) — construir **al pie de la letra**; ante ambigüedad real, an
 **descarga de conocimiento** en `STATUS.md` (qué quedó listo, qué falta, qué se necesita, qué
 sigue). Commits cortos de una línea. Respetar `ARCHITECTURE.md` siempre.
 
+**Contratos:** la forma exacta de toda petición/respuesta nueva está en `API-CONTRACTS.md` —
+implementar exactamente eso, sin inventar formas; si un contrato cambia, se actualiza allí en
+la misma tarea.
+
 ## Fase 0 — Identidad, roles y arquitectura
 - [ ] **Ampliar User**: `cedula` (única, formato colombiano — validar solo formato básico de
   dígitos, sin contraste externo), `username` (único), `role` (enum `USER|TEACHER|ADMIN|
@@ -34,11 +38,11 @@ sigue). Commits cortos de una línea. Respetar `ARCHITECTURE.md` siempre.
 
 ## Fase 2 — Publicaciones y feed propio
 - [ ] **Módulo `posts`**: `Post` + `PostMedia` (ver `DATA-MODEL.md`), CRUD con descripción y
-  medios de la biblioteca; `position` + endpoint de **reordenamiento en lote** (drag & drop del
-  cliente). Emite `post.created`.
-- [ ] **Ajustes de feed**: `feedLayout (GRID|MASONRY)`, `feedColumns (1–6)`, `feedGap` —
-  expuestos en el perfil (`GET /users/:username` los incluye) y editables en `PATCH /users/me`.
-  *Por qué:* el dueño cura cómo se ve su feed y los visitantes lo ven igual.
+  medios de la biblioteca; `position` + `PATCH /api/posts/reorder` con el contrato exacto de
+  `API-CONTRACTS.md` (lista completa de ids). Emite `post.created`.
+- [ ] **Ajustes de feed**: `feedLayout (GRID|MASONRY)`, `feedColumns (1–6)`, `feedGap (0–5)` —
+  formas y validaciones exactas en `API-CONTRACTS.md`. *Por qué:* el dueño cura cómo se ve su
+  feed y los visitantes lo ven igual.
 
 ## Fase 3 — Grafo social y privacidad
 - [ ] **Módulo `social` — follows**: entidad `Follow` con `isFavorite`;
@@ -48,12 +52,13 @@ sigue). Commits cortos de una línea. Respetar `ARCHITECTURE.md` siempre.
   contenido de Y?" (público, o follow mutuo si privado). **Toda** consulta de posts, perfil y
   búsqueda pasa por ahí. *Por qué:* privado por defecto es requisito central; centralizar evita
   fugas.
-- [ ] **Home feed**: `GET /api/feed` paginado — publicaciones de seguidos con prioridad a
-  favoritos + descubrimiento de perfiles públicos, cronológico.
+- [ ] **Home feed**: `GET /api/feed` implementando **exactamente** el algoritmo especificado
+  en `API-CONTRACTS.md` (streams S y D, boost de 12 h a favoritos, mezcla 4:1, cursor doble).
+  No introducir ranking ni aleatoriedad: es determinista a propósito.
 
 ## Fase 4 — Interacciones
-- [ ] **Likes**: `POST/DELETE /api/posts/:id/like`; `GET /api/posts/:id/likes` (número + lista
-  de usuarios) **solo para el dueño del post**. Emite `post.liked`.
+- [ ] **Likes**: `POST/DELETE /api/posts/:id/like` (idempotentes); `GET /api/posts/:id/likes`
+  **403 si no es el dueño** — contratos exactos en `API-CONTRACTS.md`. Emite `post.liked`.
 - [ ] **Guardados**: `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved`.
 - [ ] **Comentarios**: CRUD en `POST /api/posts/:id/comments`. Emite `comment.created`.
 
