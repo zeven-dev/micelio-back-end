@@ -15,7 +15,9 @@ sincronizadas.
 
 | Documento | Qué contiene | Cuándo actualizarlo |
 | --- | --- | --- |
-| [`docs/PRODUCT.md`](docs/PRODUCT.md) | Visión del producto, tipos de usuario, funcionalidades | Cuando cambie el alcance funcional |
+| [`docs/PRODUCT.md`](docs/PRODUCT.md) | Visión del producto, tipos de usuario, funcionalidades y decisiones | Cuando cambie el alcance funcional |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Arquitectura decidida: capas, eventos, módulos extraíbles | Solo con acuerdo del dueño del producto |
+| [`docs/STATUS.md`](docs/STATUS.md) | Bitácora: descarga de conocimiento por tarea/fase | **Al terminar cada tarea y cada fase** |
 | [`docs/DATA-MODEL.md`](docs/DATA-MODEL.md) | Todas las entidades: actuales y objetivo, con relaciones y razones | **Siempre** que se toque `prisma/schema.prisma` |
 | [`docs/PROCESSES.md`](docs/PROCESSES.md) | Registro de procesos: qué hacen, dónde viven, por qué existen | **Siempre** que se cree, modifique o elimine un proceso/flujo |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Lista de tareas por fases: qué hacer, cómo, por qué y dónde | Al completar o replantear una tarea |
@@ -29,27 +31,33 @@ sincronizadas.
    explicación, la explicación va en la documentación, no en el commit.
 2. **Nada queda "al aire".** Una tarea no está terminada hasta que la documentación de la tabla
    anterior refleje el cambio: qué se hizo, dónde está, por qué existe y cómo encontrarlo.
-3. **Entidades siempre trazables.** Cualquier cambio en `prisma/schema.prisma` exige actualizar
+3. **Descarga de conocimiento.** Al terminar cada tarea y al cerrar cada fase, se agrega una
+   entrada en `docs/STATUS.md`: qué quedó **listo**, qué **falta**, qué se **necesita** y qué
+   **sigue**. Es la foto del estado del proyecto para el siguiente agente.
+4. **Respeta `docs/ARCHITECTURE.md`.** Capas por módulo, cruce de dominios solo por servicios
+   públicos o eventos, `notifications` aislado y extraíble. Si una tarea la contradice, se
+   consulta antes de romperla.
+5. **Entidades siempre trazables.** Cualquier cambio en `prisma/schema.prisma` exige actualizar
    `docs/DATA-MODEL.md` en el mismo commit o en la misma tarea: campo nuevo, relación nueva,
    enum nuevo — todo con su porqué. Toda migración se genera con `npm run prisma:migrate`
    con un nombre descriptivo corto; nunca se editan migraciones ya aplicadas.
-4. **Procesos siempre documentados.** Si creas, ajustas o eliminas un flujo (un endpoint nuevo,
+6. **Procesos siempre documentados.** Si creas, ajustas o eliminas un flujo (un endpoint nuevo,
    un job, un listener de sockets, un interceptor), regístralo en `docs/PROCESSES.md` para que
    el siguiente agente sepa dónde buscar, qué buscar y por qué.
-5. **Respeta la arquitectura por módulos.** Cada dominio vive en su carpeta bajo `src/` con su
+7. **Respeta la arquitectura por módulos.** Cada dominio vive en su carpeta bajo `src/` con su
    propio `AGENTS.md`. No mezcles dominios: el acceso a datos de un dominio se hace a través de
    su servicio, no consultando Prisma desde otro módulo.
-6. **Seguridad y permisos primero.** Todo endpoint es privado por defecto (guard JWT global);
+8. **Seguridad y permisos primero.** Todo endpoint es privado por defecto (guard JWT global);
    lo público se marca con `@Public()`. Al introducir roles, todo endpoint debe declarar
    explícitamente qué roles pueden usarlo.
-7. **Los archivos nunca tocan disco local.** Todo binario va a S3 vía `StorageService`
+9. **Los archivos nunca tocan disco local.** Todo binario va a S3 vía `StorageService`
    (buffer en memoria). No introduzcas escritura a filesystem.
-8. **Valida todo lo que entra.** DTOs con `class-validator` para cada endpoint; variables de
+10. **Valida todo lo que entra.** DTOs con `class-validator` para cada endpoint; variables de
    entorno nuevas se agregan a `src/config/env.validation.ts`, `src/config/configuration.ts` y
    `.env.example`.
-9. **Pruebas.** Los servicios con lógica de negocio llevan spec (`*.spec.ts`). `npm run lint`,
+11. **Pruebas.** Los servicios con lógica de negocio llevan spec (`*.spec.ts`). `npm run lint`,
    `npm run build` y `npm test` deben pasar antes de cualquier push.
-10. **Consistencia con los clientes.** Cambios de contrato (rutas, formas de respuesta) se
+12. **Consistencia con los clientes.** Cambios de contrato (rutas, formas de respuesta) se
     documentan en Swagger (decoradores) y se anotan en `docs/PROCESSES.md`, porque hay dos
     clientes (web y app) consumiendo la misma API.
 
@@ -75,9 +83,10 @@ sincronizadas.
 | `src/common` | Filtros, interceptores y decoradores transversales | [`src/common/AGENTS.md`](src/common/AGENTS.md) |
 | `src/config` | Configuración tipada y validación de entorno | [`src/config/AGENTS.md`](src/config/AGENTS.md) |
 
-Módulos futuros planificados (ver `docs/ROADMAP.md`): `posts`, `feed`, `social` (likes, saves,
-comentarios), `chat` (WebSockets), `notifications`, `market`, `search`, `groups` (profesores),
-`admin`.
+Módulos futuros planificados (ver `docs/ROADMAP.md` y `docs/ARCHITECTURE.md`): `events`
+(contratos de eventos de dominio), `posts` (publicaciones + feed), `social` (follows/favoritos,
+visibilidad, likes, saves, comentarios), `chat` (WebSockets), `notifications` (**extraíble**),
+`market`, `search`, `groups` (profesores), `admin`.
 
 ## Comandos
 

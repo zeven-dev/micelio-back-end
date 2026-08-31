@@ -43,15 +43,28 @@ estar muy bien optimizada para móvil.
 ## Registro e identidad
 
 - Registro con: **cédula, nombre, username, contraseña y correo**.
+- La cédula es de **formato colombiano**, **única por cuenta** y por ahora solo se almacena
+  (sin validación). En el futuro se contrastará contra bases de datos de la **Universidad de
+  Antioquia** (también servirá para otorgar automáticamente el rol profesor).
 - El **username/nametag** es único y sirve para reconocer y buscar usuarios.
+
+## Grafo social y privacidad
+
+- Los usuarios pueden **seguir** a otros y **marcar seguidos como favoritos**. Existe el
+  concepto de **seguidores y seguidos**.
+- Perfiles **privados por defecto**; el dueño puede hacerlos públicos desde la configuración de
+  su perfil.
+- Si el perfil es privado, todo su contenido solo es visible para usuarios con **follow mutuo**
+  (ambos se siguen).
 
 ## Funcionalidades
 
 ### Perfil y feed personal
 - Perfil tipo Instagram: descripción (bio), foto de perfil, feed propio.
-- El usuario **construye su feed a su gusto**: reorganiza, mueve y adecúa imágenes y videos como
-  quiera. *(Los límites exactos de esta reorganización están por delimitar; en principio,
-  reordenamiento libre de fotos y videos.)*
+- El usuario **construye su feed a su gusto**: reordena sus publicaciones **arrastrándolas**
+  (drag & drop) y las publicaciones pueden tener **tamaños diferentes**.
+- El dueño elige el **layout de su feed**: **cuadrícula o masonry**, con **1 a 6 columnas** y
+  **espaciado entre publicaciones configurable**.
 - Imágenes de diferentes tamaños en feeds y home; visualización similar a Tumblr / Instagram / X.
 
 ### Biblioteca y carpetas (proyectos)
@@ -61,14 +74,15 @@ estar muy bien optimizada para móvil.
 
 ### Publicaciones e interacciones
 - Publicaciones con descripción, a partir de medios de la biblioteca.
-- **Likes**: se cuentan y almacenan, pero el contador solo es visible para el dueño de la
-  publicación.
+- **Likes**: se cuentan y almacenan; el **dueño de la publicación ve el número y quiénes**
+  dieron like. Para el resto de usuarios no son visibles.
 - **Comentarios** en publicaciones.
 - **Guardar** publicaciones de otros usuarios para verlas después.
 - **Compartir** publicaciones por chat.
 
 ### Home
-- Espacio tipo Instagram/Tumblr con publicaciones de los usuarios.
+- Espacio tipo Instagram/Tumblr con publicaciones de los usuarios: alimentado por los
+  **seguidos** (con prioridad a los **favoritos**) + descubrimiento de perfiles públicos.
 
 ### Chat
 - Mensajería entre usuarios: texto, imágenes, audios y videos (implica **sockets**).
@@ -77,13 +91,17 @@ estar muy bien optimizada para móvil.
 
 ### Notificaciones
 - Para mensajes, comentarios, me gustas y publicaciones.
-- Puede segmentarse a un microservicio si el trabajo lo amerita — **se conversa primero con el
-  dueño del producto**; de ser necesario, él creará otro repositorio.
+- **Decidido:** empieza como módulo dentro del monolito, pero **aislado y extraíble**
+  (estructura separada, comunicación solo por eventos, tablas propias) para migrar a
+  microservicio con mínimo esfuerzo cuando se decida. Ver
+  `micelio-back-end/docs/ARCHITECTURE.md`; el repo nuevo lo creará el dueño del producto.
 
 ### Mercado (market)
 - Espacio propio de cada usuario para poner en venta o promocionar **obras, creaciones,
   servicios o eventos**.
 - Separado del feed, pero el usuario puede decidir compartir un ítem del market en su feed.
+- **Pagos dentro de la aplicación:** decididos para una **segunda fase**; por ahora el market
+  es solo publicación y promoción.
 - Cada publicación de market lleva **categoría obligatoria**: `servicio`, `obra`, `evento`,
   `recurso`, etc., para permitir filtros en la búsqueda.
 
@@ -110,14 +128,26 @@ El diseño debe quedar centralizado en tokens para que un ajuste grande sea triv
   bordes y elementos resaltados.
 - Animaciones bonitas en cada interacción; la onda expansiva del like es la firma visual.
 
+## Decisiones tomadas (2026-08-31, dueño del producto)
+
+1. **Follows:** existe seguir usuarios y marcar seguidos como **favoritos**; hay seguidores y
+   seguidos.
+2. **Notificaciones:** módulo en el monolito, aislado y extraíble a microservicio (ver
+   `ARCHITECTURE.md` del back-end).
+3. **Likes:** el dueño ve **quién** dio like y el **número**.
+4. **Cédula:** formato de Colombia, única; solo se guarda (sin validación por ahora); futura
+   validación contra bases de datos de la Universidad de Antioquia.
+5. **Market:** por ahora publicar/promocionar; **pagos en una segunda fase**.
+6. **Privacidad:** perfiles **privados por defecto**, opción de hacerlos públicos en la
+   configuración del perfil; contenido privado visible solo con follow mutuo.
+7. **Feed:** reordenable arrastrando; tamaños distintos; layout **cuadrícula o masonry**, de
+   **1 a 6 columnas**, **espaciado configurable**.
+8. **Rol profesor:** lo otorga el administrador; en el futuro será automático al contrastar con
+   la base de datos de la universidad.
+
 ## Preguntas abiertas (pendientes del dueño del producto)
 
-1. ¿El home se alimenta de usuarios seguidos (¿existe "seguir"?) o es descubrimiento global?
-2. Notificaciones: ¿módulo en el monolito o microservicio en repo aparte?
-3. ¿El autor de un like es visible para el dueño de la publicación o solo el contador?
-4. Cédula: ¿formato/validación por país? ¿única por cuenta?
-5. Market: ¿solo publicación/promoción, o habrá pagos dentro de la app?
-6. ¿Perfiles públicos por defecto? ¿Habrá cuentas privadas?
-7. Reorganización del feed: ¿grid reordenable tipo Instagram o layout libre tipo collage?
-8. ¿Quién otorga el rol profesor? ¿Solo el administrador?
-9. ¿Límites de tamaño/duración para videos y audios?
+1. ¿Límites de tamaño/duración para videos y audios?
+2. ¿Comentarios con respuestas anidadas o planos?
+3. ¿Chats grupales o solo 1 a 1 en la primera versión?
+4. Alcance de visualización de admin y soporte (pantallas concretas).
