@@ -11,12 +11,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { FilesService } from './files.service';
 
 const MAX_UPLOAD_SIZE_BYTES = 250 * 1024 * 1024; // ceiling; per-type limits enforced in the service
 
 @ApiTags('files')
 @ApiBearerAuth()
+@Roles(...ALL_ROLES)
 @Controller()
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}

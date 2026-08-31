@@ -1,8 +1,9 @@
-import { Body, Controller, Get, Headers, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Headers, Post, Res, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -56,15 +57,13 @@ export class AuthController {
     return this.withMobileRefreshToken(result, refreshToken, clientType);
   }
 
+  // El perfil de la sesión vive en `GET /api/users/me` (forma `Me` de
+  // `API-CONTRACTS.md`); `auth` solo maneja el ciclo de vida de los tokens.
+  @Roles(...ALL_ROLES)
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('refresh_token', { path: '/api/auth' });
     return { loggedOut: true };
-  }
-
-  @Get('me')
-  me(@CurrentUser() user: AuthenticatedUser) {
-    return this.authService.me(user);
   }
 
   private withMobileRefreshToken<T extends object>(

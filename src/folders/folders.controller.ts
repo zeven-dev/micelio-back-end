@@ -1,6 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
@@ -8,6 +9,7 @@ import { FoldersService } from './folders.service';
 
 @ApiTags('folders')
 @ApiBearerAuth()
+@Roles(...ALL_ROLES)
 @Controller('folders')
 export class FoldersController {
   constructor(private readonly foldersService: FoldersService) {}

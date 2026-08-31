@@ -3,6 +3,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UsersService } from './users.service';
 
@@ -10,6 +11,7 @@ const MAX_AVATAR_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // ceiling; exact limit en
 
 @ApiTags('users')
 @ApiBearerAuth()
+@Roles(...ALL_ROLES)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}

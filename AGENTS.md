@@ -49,8 +49,10 @@ sincronizadas.
    propio `AGENTS.md`. No mezcles dominios: el acceso a datos de un dominio se hace a través de
    su servicio, no consultando Prisma desde otro módulo.
 8. **Seguridad y permisos primero.** Todo endpoint es privado por defecto (guard JWT global);
-   lo público se marca con `@Public()`. Al introducir roles, todo endpoint debe declarar
-   explícitamente qué roles pueden usarlo.
+   lo público se marca con `@Public()`. Todo endpoint declara explícitamente qué roles pueden
+   usarlo con `@Roles(...)` — y esto **no depende de tu memoria**: `RolesGuard` es fail-closed y
+   rechaza cualquier ruta que no sea `@Public()` y no declare roles. Para un endpoint abierto a
+   cualquier sesión, `@Roles(...ALL_ROLES)`.
 9. **Los archivos nunca tocan disco local.** Todo binario va a S3 vía `StorageService`
    (buffer en memoria). No introduzcas escritura a filesystem.
 10. **Valida todo lo que entra.** DTOs con `class-validator` para cada endpoint; variables de
