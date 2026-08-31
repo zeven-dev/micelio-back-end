@@ -12,3 +12,6 @@
 - Si un módulo nuevo necesita otro "espacio" (avatares, adjuntos de chat, market), usar
   prefijos de key distintos (`avatars/`, `chat/`, `market/`), no buckets nuevos, salvo decisión
   documentada.
+- En uso desde la Fase 0: `avatars/{userId}/{uuid}.ext` (módulo `users`,
+  `PATCH /api/users/me/avatar`); `users/{userId}/folders/{folderId}/{uuid}.ext` (módulo
+  `files`, biblioteca).

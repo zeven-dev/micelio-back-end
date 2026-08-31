@@ -54,6 +54,22 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   (Fases 5 y 7). Este scaffold solo fija el contrato compartido para que esas fases no
   inventen formas nuevas.
 
+### Perfil de usuario (Fase 0)
+- **Módulos:** `src/users`, `src/storage`
+- **Disparadores:** `GET /api/users/me`, `PATCH /api/users/me`, `PATCH /api/users/me/avatar`
+  (multipart), `GET /api/users/:username`
+- **Pasos:** `GET/PATCH /me` operan sobre el propio usuario del token; `PATCH /me/avatar` sube
+  el archivo a S3 (prefijo `avatars/{userId}/`, tipos `image/jpeg|png|webp`, máx 5 MB) vía
+  `StorageService`, actualiza `avatarKey` y borra la key anterior si existía; `GET /:username`
+  busca por username y aplica visibilidad: dueño o perfil público → `UserPublic` completo (con
+  `bio`); en cualquier otro caso, `UserPublic` limitado (sin `bio`, sin `feedSettings`).
+- **Notas (desviaciones documentadas, ver `STATUS.md`):** `followersCount`, `followingCount`,
+  `viewerFollows`, `followsViewer` son siempre `0`/`false` hasta que exista `Follow` (Fase 3,
+  no hay follow mutuo todavía); `feedSettings` se omite del todo hasta la Fase 2 (los campos
+  `feedLayout/feedColumns/feedGap` no existen aún en el esquema). `GET /api/users/:username`
+  requiere autenticación (no se marcó `@Public()`), consistente con la regla "todo endpoint es
+  privado por defecto".
+
 ### Login / Refresh / Logout
 - **Módulos:** `src/auth`
 - **Disparadores:** `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`

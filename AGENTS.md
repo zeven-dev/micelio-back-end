@@ -76,7 +76,7 @@ sincronizadas.
 | Módulo | Responsabilidad | Doc |
 | --- | --- | --- |
 | `src/auth` | Registro, login, refresh, logout; estrategias y guards JWT | [`src/auth/AGENTS.md`](src/auth/AGENTS.md) |
-| `src/users` | Acceso a datos de usuario | [`src/users/AGENTS.md`](src/users/AGENTS.md) |
+| `src/users` | Acceso a datos de usuario, perfil propio y público | [`src/users/AGENTS.md`](src/users/AGENTS.md) |
 | `src/admin` | Germen de administración: asignación de roles | [`src/admin/AGENTS.md`](src/admin/AGENTS.md) |
 | `src/events` | Contratos de eventos de dominio (tipos + nombres, sin lógica) | [`src/events/AGENTS.md`](src/events/AGENTS.md) |
 | `src/folders` | CRUD de carpetas (proyectos) por usuario | [`src/folders/AGENTS.md`](src/folders/AGENTS.md) |
