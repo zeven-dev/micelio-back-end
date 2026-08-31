@@ -17,7 +17,8 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Disparador:** `POST /api/auth/register` (público)
 - **Pasos:** valida DTO → verifica email libre → hashea contraseña (bcrypt) → crea User →
   emite access + refresh token (misma respuesta que login).
-- **Notas:** pendiente Fase 0: cédula + username + rol. El refresh se entrega como cookie
+- **Notas:** pendiente Fase 0: cédula + username + rol + `isPublic` (privado por defecto). El
+  refresh se entrega como cookie
   httpOnly (web) y también en el body (móvil).
 
 ### Login / Refresh / Logout

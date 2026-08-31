@@ -59,8 +59,8 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 | size | int | bytes |
 
 ### Enum FileType
-`IMAGE | VIDEO | TEXT`. Se ampliará con `AUDIO` cuando llegue el chat (Fase 4), si se decide
-compartir el enum.
+`IMAGE | VIDEO | TEXT`. Se ampliará con `AUDIO` en la Fase 1 (biblioteca completa); el chat
+(Fase 5) decidirá si comparte el enum o define el suyo.
 
 ---
 

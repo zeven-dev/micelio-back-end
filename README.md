@@ -1,4 +1,6 @@
 # Micelio API
+> **Antes de trabajar en este repo:** lee [`AGENTS.md`](AGENTS.md) (reglas y mapa) y la
+> documentación en [`docs/`](docs/) — producto, hoja de ruta y bitácora de estado.
 
 Backend de Micelio construido con [NestJS](https://nestjs.com/). Expone autenticación por
 correo/contraseña y un módulo de carpetas donde los usuarios pueden subir imágenes, videos y
