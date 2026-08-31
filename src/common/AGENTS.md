@@ -7,6 +7,11 @@
 - `interceptors/transform.interceptor.ts` — envoltura uniforme de respuestas.
 - `decorators/public.decorator.ts` — marca endpoints públicos (excepción al guard JWT global).
 - `decorators/current-user.decorator.ts` — inyecta el usuario autenticado.
+- `decorators/optional-auth.decorator.ts` — `@OptionalAuth()`: la ruta responde con o sin
+  sesión. Sin cabecera `Authorization` pasa como anónimo; **con** cabecera, el token debe ser
+  válido o es `401` (para no degradar en silencio a un usuario con el token expirado). Distinto
+  de `@Public()`, que ignora el token aunque venga. Úsalo solo donde la respuesta dependa de si
+  hay viewer; hoy solo `GET /api/users/:username`.
 - `decorators/roles.decorator.ts` — `@Roles(...Role[])`, guarda metadata `ROLES_KEY`. Exporta
   también `ALL_ROLES` (los cuatro roles) para endpoints abiertos a cualquier sesión.
 - `guards/roles.guard.ts` — `RolesGuard`, **fail-closed**: si la ruta es `@Public()` pasa; si no

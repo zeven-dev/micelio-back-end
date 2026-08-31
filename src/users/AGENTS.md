@@ -13,7 +13,11 @@ otro módulo).
   El borrado es limpieza *best-effort*: si S3 falla se registra un warning y la key queda
   huérfana, en vez de devolver `500` sobre un avatar que sí quedó guardado.
 - `GET /api/users/:username` — `UserPublic`; si el viewer no es el dueño y el perfil no es
-  público, se omiten `bio` y `feedSettings`. Requiere autenticación (no es `@Public()`).
+  público, se omiten `bio` y `feedSettings`. **Autenticación opcional** (`@OptionalAuth()`):
+  responde con o sin sesión, porque los perfiles se comparten por link (decisión #10 de
+  `PRODUCT.md`). Sin sesión no hay dueño posible, así que solo se abren los perfiles públicos;
+  un token inválido o expirado da `401` en vez de degradar a anónimo. Es la **única** ruta de la
+  API que no exige sesión además de las `@Public()` de `auth` y el health check.
 
 ## Piezas
 - `users.service.ts` — búsqueda por id/email/username/cedula, creación (usado por `auth`),

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
+import { IS_OPTIONAL_AUTH_KEY } from '../decorators/optional-auth.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
@@ -41,6 +42,20 @@ export class RolesGuard implements CanActivate {
     }
 
     const { user } = context.switchToHttp().getRequest();
+
+    // En rutas `@OptionalAuth()` el anónimo es una respuesta válida: `JwtAuthGuard` ya decidió
+    // que puede pasar sin sesión, y el servicio aplica la visibilidad. Con sesión, en cambio,
+    // el rol sí se exige como en cualquier otra ruta.
+    if (!user) {
+      const isOptionalAuth = this.reflector.getAllAndOverride<boolean>(IS_OPTIONAL_AUTH_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]);
+      if (isOptionalAuth) {
+        return true;
+      }
+    }
+
     if (!user || !requiredRoles.includes(user.role)) {
       throw new ForbiddenException('No tienes el rol requerido para esta acción');
     }
