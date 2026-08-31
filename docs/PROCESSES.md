@@ -42,6 +42,18 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   automatización con la Universidad de Antioquia (Fase 12) reemplazará este flujo manual para
   el rol TEACHER.
 
+### Eventos de dominio (scaffold, Fase 0)
+- **Módulos:** `src/events`
+- **Qué:** `@nestjs/event-emitter` instalado y registrado globalmente
+  (`EventEmitterModule.forRoot()` en `AppModule`). `src/events/domain-events.ts` define los
+  nombres (`DOMAIN_EVENTS`) y las formas (interfaces) de los eventos de dominio ya nombrados en
+  `ARCHITECTURE.md` (`post.created`, `post.liked`, `post.unliked`, `post.saved`, `post.unsaved`,
+  `post.shared`, `comment.created`, `message.sent`, `user.followed`).
+- **Notas:** todavía **nadie emite ni escucha** estos eventos — los productores llegan con
+  `posts`/`social`/`chat` (Fases 2–6) y los consumidores con `ranking`/`notifications`
+  (Fases 5 y 7). Este scaffold solo fija el contrato compartido para que esas fases no
+  inventen formas nuevas.
+
 ### Login / Refresh / Logout
 - **Módulos:** `src/auth`
 - **Disparadores:** `POST /api/auth/login`, `POST /api/auth/refresh`, `POST /api/auth/logout`
