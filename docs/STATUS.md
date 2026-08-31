@@ -20,6 +20,50 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-08-31 — Decisiones del dueño y cierre de puntos abiertos (tarea)
+
+El dueño del producto resolvió los puntos que quedaban de la Fase 0. Se implementó **solo lo que
+pertenece a la Fase 0**; lo de fases posteriores quedó documentado, por instrucción explícita.
+
+- **Decisiones tomadas** (ya en `PRODUCT.md` como #10, #11 y #12):
+  1. **Perfil público navegable sin sesión.** `GET /api/users/:username` se comparte por link.
+  2. **Archivos: solo por peso, nunca por duración**, y los topes en variables de entorno.
+     Se descartó validar duración porque exigiría ffprobe o un parser de medios en el servidor.
+  3. **Comentarios anidados desde el inicio** (`parentId` en `Comment`), decidido antes de
+     crear la entidad para no pagar la migración después.
+  4. **Formato de `username` confirmado** como `^[a-z0-9_.]{3,30}$` (sin cambios).
+- **Listo (implementado):**
+  - **Autenticación opcional.** Decorador `@OptionalAuth()`
+    (`src/common/decorators/optional-auth.decorator.ts`) + soporte en
+    `JwtAuthGuard.handleRequest` y en `RolesGuard`. Sin cabecera `Authorization` la petición
+    pasa como anónima; **con** cabecera, un token inválido o expirado sigue dando `401` para que
+    el cliente refresque en vez de degradar en silencio a la vista de anónimo. Es la única ruta
+    no `@Public()` que responde sin sesión. Contrato exacto (tabla de casos) en
+    `API-CONTRACTS.md`.
+  - **Todos los pesos máximos son configurables:** `UPLOAD_MAX_IMAGE_MB`, `UPLOAD_MAX_VIDEO_MB`,
+    `UPLOAD_MAX_TEXT_MB`, `UPLOAD_MAX_AVATAR_MB` en `configuration.ts`, `env.validation.ts` y
+    `.env.example`. Se eliminaron las constantes de `file-type.util.ts`, `files.controller.ts`,
+    `users.controller.ts` y `users.service.ts`. El tope de Multer se arma en
+    `MulterModule.registerAsync` con **1 MB de holgura** sobre el límite real: así el usuario
+    recibe el mensaje en español con el tope vigente en vez del `File too large` de Multer, que
+    era lo que pasaba antes (el tope del decorador era igual al del servicio, así que la
+    validación del servicio era código muerto).
+- **Verificación:** `lint`, `build` y `test` (**36 tests**, antes 30) en verde. Smoke test
+  end-to-end contra Postgres real con `UPLOAD_MAX_AVATAR_MB=7` (distinto del default 5) para
+  comprobar que la variable manda: perfil público visible sin token; privado oculta `bio` sin
+  token, a un tercero con token, y la muestra al dueño; token inválido → `401`; username
+  inexistente → `404`; `users/me`, `folders`, `admin` siguen dando `401` sin sesión; avatar de
+  7.5 MB → `413 El avatar supera el tamaño máximo de 7 MB`; imagen de 16 MB → `413 ... para
+  image (15 MB)`; 20 MB → cortado por Multer.
+- **Falta:** integrar la rama (sigue sin PR, por decisión del dueño). Los clientes aún no tienen
+  vista de perfil ajeno: la ruta pública existe en la API pero nadie la consume todavía (Fase 3).
+- **Necesito:** dos preguntas siguen abiertas y no bloquean nada aún — chats grupales o 1 a 1
+  (Fase 6) y alcance de admin/soporte (Fase 11). Confirmar además el supuesto de **un solo nivel
+  de anidación** en comentarios, que elegí al escribir el contrato (el dueño pidió "anidados",
+  sin precisar profundidad).
+- **Sigue:** Fase 1 del `ROADMAP.md`. La tarea de `AUDIO` ya lleva anotado qué tocar: el tipo,
+  `UPLOAD_MAX_AUDIO_MB` y el `Math.max` del tope de Multer; sin validación de duración.
+
 ### 2026-08-31 — Revisión de la Fase 0: cierre de huecos (tarea)
 
 Repaso de la Fase 0 ya cerrada, verificando el código contra lo que afirmaba esta bitácora. Las

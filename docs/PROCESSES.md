@@ -30,6 +30,14 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Pasos:** `JwtAuthGuard` puebla `request.user` (incluye `role`, viaja en el JWT) →
   `RolesGuard` mira primero si la ruta es `@Public()` (pasa sin más); si no lo es, exige que
   declare `@Roles(...)` y que `user.role` esté en la lista, o responde `403`.
+- **Autenticación opcional (`@OptionalAuth()`):** para rutas que responden con o sin sesión.
+  `JwtAuthGuard.handleRequest` deja pasar como anónimo (`request.user` = `undefined`) **solo** si
+  la petición no trae cabecera `Authorization`; si la trae y el token es inválido o expiró, se
+  deja fallar con `401` para que el cliente dispare su refresco en vez de recibir en silencio la
+  vista de anónimo. `RolesGuard` acepta al anónimo en esas rutas (la visibilidad la aplica el
+  servicio) pero sigue exigiendo el rol cuando **sí** hay sesión, y sigue exigiendo que la ruta
+  declare `@Roles(...)`. Hoy la usa solo `GET /api/users/:username`. Distinto de `@Public()`,
+  que ignora el token aunque venga.
 - **Fail-closed:** una ruta que no sea `@Public()` **y** no declare `@Roles(...)` se considera
   un error de programación y responde `500` con el nombre del controlador y del handler. Así la
   regla 8 de `AGENTS.md` ("todo endpoint declara explícitamente qué roles pueden usarlo") se
@@ -101,6 +109,14 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Pasos:** Multer en memoria (nunca disco) → valida mimeType/tamaño → `StorageService.upload`
   a S3 con key única → registra `FileAsset` → las lecturas devuelven URLs firmadas con
   expiración (`AWS_S3_SIGNED_URL_EXPIRES_IN`).
+- **Límites de peso (configurables):** viven en `UPLOAD_MAX_*_MB` (config tipada
+  `uploads.*`), no en constantes del código: subir un tope es cambiar el `.env` y reiniciar.
+  Dos capas: el tope de Multer se arma en `MulterModule.registerAsync` (`files.module.ts` y
+  `users.module.ts`) con **1 MB de holgura** sobre el límite real, y el peso exacto por tipo lo
+  valida el servicio. Esa holgura existe para que un archivo apenas pasado del límite reciba el
+  mensaje en español con el tope vigente en vez del `File too large` genérico de Multer; algo
+  desproporcionado lo sigue cortando Multer como guarda dura de memoria.
+  **No se valida duración** de audio ni video (decisión #11 de `PRODUCT.md`).
 - **Notas:** MinIO en local (docker-compose), S3 real en producción sin cambio de código.
   Estos archivos son la **biblioteca de publicaciones**; los adjuntos de chat serán otro flujo.
 

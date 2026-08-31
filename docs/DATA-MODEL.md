@@ -125,7 +125,11 @@ Ver la entidad `User` y el enum `Role` en "Entidades existentes" arriba.
 - **Like**: `id, postId, userId, createdAt` con único (postId, userId). El dueño del post ve el
   contador **y la lista de quiénes** dieron like; nadie más ve nada.
 - **SavedPost**: `id, postId, userId, createdAt` único (postId, userId) — guardados.
-- **Comment**: `id, postId, authorId, body, createdAt`. (Respuestas anidadas: pregunta abierta.)
+- **Comment**: `id, postId, authorId, body, parentId?, createdAt`. `parentId` apunta a otro
+  `Comment` del mismo post (auto-relación, `onDelete: Cascade`): **respuestas anidadas desde el
+  inicio**, decisión del dueño (PRODUCT.md #12), tomada antes de crear la entidad para no pagar
+  la migración después. Índice por `(postId, parentId, createdAt)`: los comentarios raíz son los
+  de `parentId = null`.
 
 ### Fase 5 — Afinidad y ranking (módulo `ranking`)
 - **UserAffinity**: `id, userId → User, targetUserId → User, score Float @default(0),

@@ -35,6 +35,12 @@ la misma tarea.
 - [ ] **Sub-carpetas**: `parentId` en `Folder`, validación de ciclos, unicidad
   (userId, parentId, name). *Dónde:* `src/folders`.
 - [ ] **Audio**: `AUDIO` en `FileType` + mimeTypes. *Por qué:* chat y obra sonora.
+  **Ya decidido** (no volver a preguntar): se valida **solo por peso, nunca por duración**
+  (decisión #11 de `PRODUCT.md`). Añadir `UPLOAD_MAX_AUDIO_MB` (sugerido: 50) a
+  `configuration.ts`, `env.validation.ts` y `.env.example`, y su entrada en
+  `MAX_SIZE_CONFIG_KEY` (`src/files/utils/file-type.util.ts`) — la infraestructura de límites
+  configurables ya existe, es solo un tipo más. Recordar incluir `AUDIO` en el `Math.max` del
+  tope de Multer en `files.module.ts`.
 
 ## Fase 2 — Publicaciones y feed propio
 - [ ] **Módulo `posts`**: `Post` + `PostMedia` (ver `DATA-MODEL.md`), CRUD con descripción,
@@ -64,6 +70,8 @@ la misma tarea.
 - [ ] **Guardados**: `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved`. Emite
   `post.saved` / `post.unsaved`.
 - [ ] **Comentarios**: CRUD en `POST /api/posts/:id/comments`. Emite `comment.created`.
+  **Anidados desde el inicio** (decisión #12 de `PRODUCT.md`): `parentId` en `Comment`, un solo
+  nivel de profundidad; formas exactas en `API-CONTRACTS.md`.
 
 ## Fase 5 — Afinidad y ranking personalizado
 - [ ] **Módulo `ranking`**: tablas `UserAffinity` y `UserTagAffinity` (ver `DATA-MODEL.md`),

@@ -42,6 +42,20 @@ agrega:
 ```
 `gap` es el índice 0–5 en la escala de espaciado del design system, no píxeles.
 
+### Perfil público — `GET /api/users/:username` (**autenticación opcional**)
+Única ruta de la API que responde **con o sin sesión** (decisión #10 de `PRODUCT.md`: los
+perfiles se comparten por link). Reglas exactas:
+
+| Petición | Respuesta |
+| --- | --- |
+| Sin cabecera `Authorization`, perfil `isPublic: true` | `UserPublic` completo (con `bio`) |
+| Sin cabecera `Authorization`, perfil privado | `UserPublic` limitado (sin `bio`) |
+| Con `Authorization` válido | Como arriba, y además el dueño ve su propio perfil completo aunque sea privado |
+| Con `Authorization` **inválido o expirado** | `401` — **no** se degrada a anónimo, para que el cliente dispare su refresco |
+| Username inexistente | `404` (con o sin sesión) |
+
+La `cedula` no se devuelve nunca, en ninguna de las variantes.
+
 ### Me — `GET /api/users/me` (solo el propio)
 `UserPublic` completo + `{ "email": "string", "role": "USER|TEACHER|ADMIN|SUPPORT" }`.
 La **cédula nunca se devuelve** en ninguna respuesta, ni siquiera en `me`.
@@ -69,8 +83,14 @@ etiquetas alimentan la búsqueda y la afinidad por temas (ver "Afinidad y rankin
 
 ### Comment
 ```json
-{ "id": "uuid", "author": UserPublic, "body": "string", "createdAt": ISO }
+{ "id": "uuid", "author": UserPublic, "body": "string",
+  "parentId": "uuid|null", "replyCount": 0, "createdAt": ISO }
 ```
+Comentarios **anidados** (decisión #12 de `PRODUCT.md`). `parentId: null` = comentario raíz;
+`replyCount` solo se incluye en los raíz. El listado del post devuelve los raíz paginados; las
+respuestas de un hilo se piden aparte. La profundidad se limita a **un nivel**: responder a una
+respuesta cuelga del mismo raíz (`parentId` del padre), como en Instagram — evita hilos
+infinitos sin perder la conversación.
 
 ### Notification
 ```json
@@ -113,6 +133,13 @@ concurrentes y hace el optimistic update trivial en los clientes.
 Acepta parcial: `{ "feedSettings": { "layout"?, "columns"?, "gap"? } }` además de
 `name?, bio?, isPublic?`. Validación: `columns` entero 1–6; `gap` entero 0–5;
 `layout` ∈ {GRID, MASONRY}. Avatar aparte: `PATCH /api/users/me/avatar` (multipart).
+
+### Límites de subida
+Solo por **peso**, nunca por duración (decisión #11 de `PRODUCT.md`). Los topes viven en
+variables de entorno (`UPLOAD_MAX_IMAGE_MB`, `UPLOAD_MAX_VIDEO_MB`, `UPLOAD_MAX_TEXT_MB`,
+`UPLOAD_MAX_AVATAR_MB`), así que el cliente **no debe hardcodearlos**: si excede, la API
+responde `413` con el mensaje exacto y el límite vigente en MB
+(p. ej. `El archivo supera el tamaño máximo permitido para image (15 MB)`).
 
 ### Likes — Fase 4
 - `POST /api/posts/:id/like` → `{ "liked": true }` (idempotente; repetir no duplica).

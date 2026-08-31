@@ -159,9 +159,24 @@ El diseño debe quedar centralizado en tokens para que un ajuste grande sea triv
    explore y la búsqueda. Contadores con pesos y decaimiento, sin ML; los posts llevan
    etiquetas para habilitarlo.
 
+10. **Perfil público navegable sin sesión:** un perfil con `isPublic: true` se ve por link sin
+    tener cuenta (se comparte la obra hacia afuera). Los privados siguen mostrando solo la vista
+    limitada, y **todo lo demás de la API sigue exigiendo sesión**. Implementado en
+    `GET /api/users/:username` con autenticación opcional.
+11. **Límites de archivos: solo por peso, nunca por duración.** No se valida la duración de
+    audio ni de video — hacerlo obligaría a inspeccionar el medio en el servidor (ffprobe o un
+    parser de metadatos) y contradice "los archivos nunca tocan disco". El peso es el único
+    tope, y **vive en variables de entorno** (`UPLOAD_MAX_*_MB`) para poder subirlo sin tocar
+    código ni desplegar una versión nueva.
+12. **Comentarios anidados desde el inicio:** `Comment` lleva `parentId` para respuestas en
+    hilo, no una lista plana. Se decidió antes de crear la entidad para no pagar una migración
+    después.
+
 ## Preguntas abiertas (pendientes del dueño del producto)
 
-1. ¿Límites de tamaño/duración para videos y audios?
-2. ¿Comentarios con respuestas anidadas o planos?
-3. ¿Chats grupales o solo 1 a 1 en la primera versión?
-4. Alcance de visualización de admin y soporte (pantallas concretas).
+1. ¿Chats grupales o solo 1 a 1 en la primera versión? *(No bloquea hasta la Fase 6.)*
+2. Alcance de visualización de admin y soporte (pantallas concretas). *(No bloquea hasta la
+   Fase 11; el `ROADMAP.md` ya dice "implementar lo mínimo útil y documentar".)*
+
+*(Resueltas el 2026-08-31: límites de tamaño/duración → decisión 11; comentarios anidados o
+planos → decisión 12. Ver `docs/STATUS.md`.)*
