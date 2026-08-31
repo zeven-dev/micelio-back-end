@@ -5,13 +5,15 @@ import {
   NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { FileType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 import { FoldersService } from '../folders/folders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { FileResponseDto } from './dto/file-response.dto';
-import { MAX_FILE_SIZE_BYTES, resolveFileType } from './utils/file-type.util';
+import { BYTES_PER_MB, MAX_SIZE_CONFIG_KEY, resolveFileType } from './utils/file-type.util';
 
 type UploadedFile = {
   originalname: string;
@@ -26,7 +28,13 @@ export class FilesService {
     private readonly prisma: PrismaService,
     private readonly foldersService: FoldersService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
+    private readonly configService: ConfigService,
   ) {}
+
+  /** Peso máximo del tipo, leído de la configuración (`UPLOAD_MAX_*_MB`) en cada subida. */
+  private maxBytesFor(type: FileType): number {
+    return this.configService.get<number>(MAX_SIZE_CONFIG_KEY[type])! * BYTES_PER_MB;
+  }
 
   async findAllForFolder(folderId: string, userId: string): Promise<FileResponseDto[]> {
     await this.foldersService.findOneOrFail(folderId, userId);
@@ -49,9 +57,11 @@ export class FilesService {
     await this.foldersService.findOneOrFail(folderId, userId);
 
     const type = resolveFileType(file.mimetype);
-    if (file.size > MAX_FILE_SIZE_BYTES[type]) {
+    const maxBytes = this.maxBytesFor(type);
+    if (file.size > maxBytes) {
       throw new PayloadTooLargeException(
-        `El archivo supera el tamaño máximo permitido para ${type.toLowerCase()}`,
+        `El archivo supera el tamaño máximo permitido para ${type.toLowerCase()} ` +
+          `(${Math.floor(maxBytes / BYTES_PER_MB)} MB)`,
       );
     }
 

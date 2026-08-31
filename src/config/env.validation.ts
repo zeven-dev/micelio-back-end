@@ -12,6 +12,11 @@ export const envValidationSchema = Joi.object({
   JWT_REFRESH_SECRET: Joi.string().min(16).required(),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
 
+  UPLOAD_MAX_IMAGE_MB: Joi.number().positive().default(15),
+  UPLOAD_MAX_VIDEO_MB: Joi.number().positive().default(250),
+  UPLOAD_MAX_TEXT_MB: Joi.number().positive().default(5),
+  UPLOAD_MAX_AVATAR_MB: Joi.number().positive().default(5),
+
   AWS_REGION: Joi.string().required(),
   AWS_S3_BUCKET: Joi.string().required(),
   AWS_ACCESS_KEY_ID: Joi.string().required(),

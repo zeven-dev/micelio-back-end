@@ -4,6 +4,7 @@ import {
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
 import { UsersService } from './users.service';
@@ -45,7 +46,10 @@ describe('UsersService', () => {
       getSignedDownloadUrl: jest.fn().mockResolvedValue('https://signed.example/avatar.png'),
       delete: jest.fn().mockResolvedValue(undefined),
     };
-    usersService = new UsersService(prisma as unknown as PrismaService, storage);
+    const configService = {
+      get: jest.fn((key: string) => (key === 'uploads.maxAvatarMb' ? 5 : undefined)),
+    } as unknown as ConfigService;
+    usersService = new UsersService(prisma as unknown as PrismaService, storage, configService);
   });
 
   describe('getPublicProfile', () => {
@@ -79,6 +83,41 @@ describe('UsersService', () => {
       const result = await usersService.getPublicProfile('ada', 'user-1');
 
       expect(result.bio).toBe('Hola');
+    });
+
+    // La ruta es `@OptionalAuth()`: se comparte por link, así que puede no haber viewer.
+    describe('viewed by an anonymous visitor (no session)', () => {
+      it('includes bio for a public profile', async () => {
+        prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: true, bio: 'Hola' });
+
+        const result = await usersService.getPublicProfile('ada');
+
+        expect(result.bio).toBe('Hola');
+      });
+
+      it('omits bio for a private profile', async () => {
+        prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: false, bio: 'Hola' });
+
+        const result = await usersService.getPublicProfile('ada');
+
+        expect(result.bio).toBeUndefined();
+        expect(result.username).toBe('ada');
+      });
+
+      // Sin viewer, `user.id === viewerId` no debe volverse cierto por comparar undefined
+      // contra un id ausente: un perfil privado sin dueño nunca se abre.
+      it('never treats the anonymous visitor as the owner', async () => {
+        prisma.user.findUnique.mockResolvedValue({
+          ...baseUser,
+          id: undefined,
+          isPublic: false,
+          bio: 'Hola',
+        });
+
+        const result = await usersService.getPublicProfile('ada');
+
+        expect(result.bio).toBeUndefined();
+      });
     });
   });
 

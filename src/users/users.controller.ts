@@ -3,11 +3,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { OptionalAuth } from '../common/decorators/optional-auth.decorator';
 import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { UsersService } from './users.service';
-
-const MAX_AVATAR_UPLOAD_SIZE_BYTES = 5 * 1024 * 1024; // ceiling; exact limit enforced in the service
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -28,15 +27,17 @@ export class UsersController {
 
   @Patch('me/avatar')
   @ApiConsumes('multipart/form-data')
-  @UseInterceptors(
-    FileInterceptor('avatar', { limits: { fileSize: MAX_AVATAR_UPLOAD_SIZE_BYTES } }),
-  )
+  // El tope de tamaño viene de `MulterModule.registerAsync` en `users.module.ts`.
+  @UseInterceptors(FileInterceptor('avatar'))
   updateAvatar(@CurrentUser() user: AuthenticatedUser, @UploadedFile() file: Express.Multer.File) {
     return this.usersService.updateAvatar(user.id, file);
   }
 
+  // Decisión del dueño del producto: los perfiles se comparten por link, así que esta ruta
+  // responde con o sin sesión. Un perfil privado sigue mostrando solo la vista limitada.
+  @OptionalAuth()
   @Get(':username')
-  getByUsername(@Param('username') username: string, @CurrentUser() viewer: AuthenticatedUser) {
-    return this.usersService.getPublicProfile(username, viewer.id);
+  getByUsername(@Param('username') username: string, @CurrentUser() viewer?: AuthenticatedUser) {
+    return this.usersService.getPublicProfile(username, viewer?.id);
   }
 }

@@ -7,15 +7,16 @@ import {
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
+import { BYTES_PER_MB } from '../files/utils/file-type.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { UpdateMeDto } from './dto/update-me.dto';
 
 const AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export interface CreateUserData {
   email: string;
@@ -50,6 +51,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
+    private readonly configService: ConfigService,
   ) {}
 
   findByEmail(email: string) {
@@ -99,8 +101,9 @@ export class UsersService {
     if (!AVATAR_MIME_TYPES.includes(file.mimetype)) {
       throw new UnsupportedMediaTypeException('El avatar debe ser una imagen JPEG, PNG o WEBP');
     }
-    if (file.size > MAX_AVATAR_SIZE_BYTES) {
-      throw new PayloadTooLargeException('El avatar supera el tamaño máximo de 5 MB');
+    const maxAvatarMb = this.configService.get<number>('uploads.maxAvatarMb')!;
+    if (file.size > maxAvatarMb * BYTES_PER_MB) {
+      throw new PayloadTooLargeException(`El avatar supera el tamaño máximo de ${maxAvatarMb} MB`);
     }
 
     const user = await this.requireById(userId);
@@ -128,14 +131,18 @@ export class UsersService {
     return { ...publicView, email: updated.email, role: updated.role };
   }
 
-  async getPublicProfile(username: string, viewerId: string): Promise<UserPublicView> {
+  /**
+   * `viewerId` es opcional: la ruta es `@OptionalAuth()` porque los perfiles se comparten por
+   * link. Un visitante sin sesión nunca es el dueño, así que solo ve perfiles públicos.
+   */
+  async getPublicProfile(username: string, viewerId?: string): Promise<UserPublicView> {
     const user = await this.findByUsername(username);
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
     // La regla completa de visibilidad (follow mutuo) llega en la Fase 3 con el
     // módulo `social`; por ahora solo existe el propio perfil y el flag `isPublic`.
-    const hasAccess = user.id === viewerId || user.isPublic;
+    const hasAccess = (viewerId !== undefined && user.id === viewerId) || user.isPublic;
     return this.toUserPublic(user, { includeExtended: hasAccess });
   }
 

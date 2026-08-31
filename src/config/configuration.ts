@@ -11,6 +11,15 @@ export default () => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET,
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
   },
+  // Pesos máximos por tipo de archivo, en MB para que subirlos sea trivial (decisión del
+  // dueño del producto). El código los convierte a bytes; nadie hardcodea tamaños.
+  // No hay límite de duración para audio/video: se validan solo por peso (ver PRODUCT.md).
+  uploads: {
+    maxImageMb: parseInt(process.env.UPLOAD_MAX_IMAGE_MB ?? '15', 10),
+    maxVideoMb: parseInt(process.env.UPLOAD_MAX_VIDEO_MB ?? '250', 10),
+    maxTextMb: parseInt(process.env.UPLOAD_MAX_TEXT_MB ?? '5', 10),
+    maxAvatarMb: parseInt(process.env.UPLOAD_MAX_AVATAR_MB ?? '5', 10),
+  },
   s3: {
     region: process.env.AWS_REGION,
     bucket: process.env.AWS_S3_BUCKET,
