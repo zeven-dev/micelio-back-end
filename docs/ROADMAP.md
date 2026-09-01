@@ -55,12 +55,12 @@ la misma tarea.
   (`MAX_FILE_SIZE_BYTES`) ignorando `UPLOAD_MAX_*_MB`; y `confirm` confiaba en el `size` que
   declaraba el cliente. Ver `docs/STATUS.md` (2026-09-01).
 
-## Fase 2 — Publicaciones y feed propio
-- [ ] **Módulo `posts`**: `Post` + `PostMedia` (ver `DATA-MODEL.md`), CRUD con descripción,
+## Fase 2 — Publicaciones y feed propio — **cerrada 2026-09-01**
+- [x] **Módulo `posts`**: `Post` + `PostMedia` (ver `DATA-MODEL.md`), CRUD con descripción,
   **etiquetas** (normalización y extracción de `#tags` exactas en `API-CONTRACTS.md`) y
   medios de la biblioteca; `position` + `PATCH /api/posts/reorder` con el contrato exacto de
   `API-CONTRACTS.md` (lista completa de ids). Emite `post.created`.
-- [ ] **Ajustes de feed**: `feedLayout (GRID|MASONRY)`, `feedColumns (1–6)`, `feedGap (0–5)` —
+- [x] **Ajustes de feed**: `feedLayout (GRID|MASONRY)`, `feedColumns (1–6)`, `feedGap (0–5)` —
   formas y validaciones exactas en `API-CONTRACTS.md`. *Por qué:* el dueño cura cómo se ve su
   feed y los visitantes lo ven igual.
 

@@ -73,7 +73,10 @@ La **cédula nunca se devuelve** en ninguna respuesta, ni siquiera en `me`.
 ```
 `likeCount` **solo** se incluye cuando el viewer es el autor; para cualquier otro viewer el
 campo **se omite** (no se manda en 0 — se omite). `width`/`height` son necesarios para el
-masonry de los clientes.
+masonry de los clientes: los **declara el cliente al publicar** (el binario nunca pasa por el
+backend, así que el servidor no puede medirlos) y se devuelven como `number | null` — nulos en
+audio y texto, que no tienen relación de aspecto. Cada medio trae además su `url` firmada y el
+`expiresAt` correspondiente.
 
 **Etiquetas (`tags`):** al crear/editar un post el cliente manda `tags: string[]` explícitas y
 el servidor además extrae todo token `#palabra` de la descripción y lo fusiona. Normalización
@@ -121,6 +124,33 @@ infinitos sin perder la conversación.
 ```
 
 ## Endpoints con contrato fino
+
+### Publicaciones — Fase 2
+
+Todas exigen sesión (`@Roles(...ALL_ROLES)`); la única ruta con autenticación opcional de la API
+sigue siendo `GET /api/users/:username`.
+
+| Endpoint | Body | Respuesta |
+| --- | --- | --- |
+| `POST /api/posts` | `{ description?, tags?, media: [{ fileAssetId, width?, height? }] }` | `Post` |
+| `GET /api/posts/:id` | — | `Post` |
+| `GET /api/users/:username/posts?cursor=&limit=` | — | paginado estándar de `Post` |
+| `PATCH /api/posts/:id` | `{ description?, tags?, media? }` | `Post` |
+| `DELETE /api/posts/:id` | — | `204` |
+
+- **`media` es el orden**: el índice en el arreglo se persiste como `order` y es el orden del
+  carrusel. Entre 1 y 10 medios; todos deben ser archivos **de la biblioteca del autor**
+  (`404`/`403` si no) y ninguno puede repetirse en la misma publicación (`400`).
+- **`PATCH` es parcial**, pero `media` presente **reemplaza la lista completa** (no hay deltas),
+  igual que `orderedIds` en el reordenamiento. Si cambia `description`, las etiquetas se
+  recalculan aunque no venga `tags`.
+- **Orden del feed propio**: `position` ascendente, desempate `id` ascendente. Una publicación
+  nueva entra **primera** (`position: 0`) y las demás bajan un puesto; el autor reordena cuando
+  quiera con `PATCH /api/posts/reorder`.
+- **Visibilidad (Fase 2)**: el autor siempre; los demás solo si el perfil es público, y si no
+  `403` (`GET /api/posts/:id` y `GET /api/users/:username/posts`). El follow mutuo entra en la
+  Fase 3 sin cambiar estas formas.
+- `description` admite hasta 2200 caracteres.
 
 ### Reordenar el feed propio — `PATCH /api/posts/reorder`
 Body: `{ "orderedIds": ["uuid", ...] }` — la lista **completa** de ids de posts del usuario en
@@ -350,3 +380,4 @@ Con `q` presente, después de filtrar por visibilidad:
 | --- | --- | --- |
 | 2026-08-31 | Documento creado: convenciones, formas de recursos, contratos finos y algoritmo del feed | Eliminar ambigüedad para los agentes de las Fases 2–8 |
 | 2026-08-31 | Etiquetas en Post; afinidad usuario→usuario y usuario→etiqueta con pesos y decaimiento; feed v2; `GET /api/explore`; orden de búsqueda | Decisión del dueño: ranking personalizado del home y la búsqueda |
+| 2026-09-01 | Fase 2: sección "Publicaciones — Fase 2" con el CRUD de `posts` y el listado por perfil (formas que el documento no fijaba); `width`/`height` de `Post.media` documentados como `number \| null` declarados por el cliente | Implementación de la Fase 2: el contrato definía la forma de `Post` pero no cómo se crea, edita, lista ni borra |

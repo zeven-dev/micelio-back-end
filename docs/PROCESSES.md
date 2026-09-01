@@ -65,10 +65,10 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   nombres (`DOMAIN_EVENTS`) y las formas (interfaces) de los eventos de dominio ya nombrados en
   `ARCHITECTURE.md` (`post.created`, `post.liked`, `post.unliked`, `post.saved`, `post.unsaved`,
   `post.shared`, `comment.created`, `message.sent`, `user.followed`).
-- **Notas:** todavía **nadie emite ni escucha** estos eventos — los productores llegan con
-  `posts`/`social`/`chat` (Fases 2–6) y los consumidores con `ranking`/`notifications`
-  (Fases 5 y 7). Este scaffold solo fija el contrato compartido para que esas fases no
-  inventen formas nuevas.
+- **Notas:** desde la Fase 2 hay **un productor**: `posts` emite `post.created` al publicar.
+  Consumidores sigue sin haber (`ranking` en la Fase 5, `notifications` en la Fase 7), y el
+  resto de los eventos siguen siendo scaffold — sus productores llegan con `social`/`chat`
+  (Fases 3, 4 y 6).
 
 ### Perfil de usuario (Fase 0; avatar rehecho a subida directa en Fase 0.5)
 - **Módulos:** `src/users`, `src/storage`
@@ -86,10 +86,10 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   `UserPublic` limitado (sin `bio`, sin `feedSettings`).
 - **Notas (desviaciones documentadas, ver `STATUS.md`):** `followersCount`, `followingCount`,
   `viewerFollows`, `followsViewer` son siempre `0`/`false` hasta que exista `Follow` (Fase 3,
-  no hay follow mutuo todavía); `feedSettings` se omite del todo hasta la Fase 2 (los campos
-  `feedLayout/feedColumns/feedGap` no existen aún en el esquema). `GET /api/users/:username`
-  requiere autenticación (no se marcó `@Public()`), consistente con la regla "todo endpoint es
-  privado por defecto".
+  no hay follow mutuo todavía); `feedSettings` ya se devuelve desde la Fase 2 (ver "Ajustes de
+  presentación del feed"). `GET /api/users/:username` es
+  `@OptionalAuth()` desde la decisión #10 de `PRODUCT.md` (perfiles públicos navegables por
+  link); el resto de la API sigue exigiendo sesión.
 
 ### Login / Refresh / Logout
 - **Módulos:** `src/auth`
@@ -136,6 +136,53 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   publicaciones**; los adjuntos de chat serán otro flujo. El bucket necesita CORS habilitado
   para `PUT` desde los orígenes de los clientes (infra, fuera de este repo) — ver
   `docs/API-CONTRACTS.md`.
+
+### Publicaciones y feed propio (Fase 2)
+- **Módulos:** `src/posts` (+ `src/users` y `src/files` por sus servicios públicos, `src/storage`)
+- **Disparadores:** `POST /api/posts`, `GET /api/posts/:id`, `PATCH /api/posts/:id`,
+  `DELETE /api/posts/:id`, `GET /api/users/:username/posts`, `PATCH /api/posts/reorder`
+- **Pasos (crear):** normaliza las etiquetas (`utils/tags.util.ts`: explícitas + `#hashtags` de
+  la descripción, minúsculas, sin `#`, solo `[a-z0-9_áéíóúñü-]`, 30 caracteres por etiqueta, sin
+  duplicadas; más de 10 → `400`) → valida que los medios sean archivos de la biblioteca del autor
+  y no se repitan (`FilesService.findOwnedByUser`) → en una transacción, empuja las posiciones
+  existentes (`position + 1`) y crea la publicación en `position: 0` con sus `post_media` →
+  emite `post.created` (`{ postId, authorId, tags }`).
+- **Pasos (leer):** `GET /api/posts/:id` y el listado por perfil aplican la visibilidad con
+  `UsersService.canViewContentOf` (`403` si el perfil es privado para el viewer) y arman la
+  respuesta con el autor (`UsersService.getPublicViewsByIds`, una consulta para todos) y los
+  archivos (`FilesService.findManyByIds`), firmando cada medio con `StorageService`
+  (`url` + `expiresAt`). El listado pagina por cursor sobre `(position, id)`.
+- **Pasos (reordenar):** compara el conjunto de `orderedIds` con las publicaciones del autor
+  (misma cantidad, sin repetidos, todos suyos; si no, `400`) y persiste `position` = índice del
+  arreglo en una transacción → `{ reordered: true }`.
+- **Notas:** `posts` **no** consulta `users`, `folders` ni `file_assets` con Prisma (regla 7);
+  todo cruce va por el servicio público del otro módulo. Los contadores sociales
+  (`likeCount`/`commentCount`/`viewerHasLiked`/`viewerHasSaved`) valen `0`/`false` hasta la
+  Fase 4 — y `likeCount` solo se incluye si el viewer es el autor. Borrar una publicación no
+  borra archivos: la biblioteca es independiente del feed.
+
+### Ajustes de presentación del feed (Fase 2)
+- **Módulos:** `src/users`
+- **Disparador:** `PATCH /api/users/me` con `{ feedSettings: { layout?, columns?, gap? } }`
+- **Pasos:** valida el DTO anidado (`layout` ∈ {GRID, MASONRY}, `columns` 1–6, `gap` 0–5) y
+  escribe solo las claves presentes en `feedLayout`/`feedColumns`/`feedGap` de `User`. Los tres
+  valores viajan de vuelta en `feedSettings` de todo `UserPublic` **extendido** (dueño o perfil
+  público); en la vista limitada de un perfil privado se omiten, igual que `bio`.
+- **Notas:** `gap` es el **índice** de la escala de espaciado del design system (0–5), no
+  píxeles: la traducción a píxeles es de cada cliente. Los visitantes ven el feed exactamente
+  como lo curó el dueño.
+
+### Borrado de archivos y carpetas con contenido publicado (Fase 2)
+- **Módulos:** `src/files`, `src/folders`
+- **Disparadores:** `DELETE /api/files/:id`, `DELETE /api/folders/:id`
+- **Pasos:** `post_media` referencia `file_assets` con `onDelete: Restrict`. En `files` se borra
+  **primero la fila** y después el objeto de S3: si la publicación lo está usando, Postgres
+  responde `P2003`, se traduce a `409` y el binario queda intacto. En `folders`, la cascada
+  carpeta → sub-carpetas → archivos se detiene por la misma FK y aborta el borrado completo:
+  también `409`.
+- **Notas:** decisión registrada en `docs/DATA-MODEL.md` (bloquear, no cascadear ni marcar). El
+  hueco de los objetos huérfanos en S3 al borrar carpetas sigue abierto y **sin cambios** — ver
+  `src/folders/AGENTS.md` y `docs/STATUS.md`.
 
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`

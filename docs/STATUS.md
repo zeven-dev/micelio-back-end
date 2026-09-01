@@ -20,6 +20,88 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-01 — Fase 2: publicaciones y feed propio (cierre de fase)
+- **Listo:**
+  - **Módulo `posts`** (`src/posts/`, con su `AGENTS.md`): `POST /api/posts`,
+    `GET /api/posts/:id`, `PATCH /api/posts/:id`, `DELETE /api/posts/:id`,
+    `GET /api/users/:username/posts` (paginado por cursor) y `PATCH /api/posts/reorder`.
+    Formas exactas en `docs/API-CONTRACTS.md` ("Publicaciones — Fase 2" + "Post"). Emite
+    `post.created` — primer productor real de eventos de dominio del proyecto.
+  - **Entidades** `Post` y `PostMedia` + `feedLayout/feedColumns/feedGap` en `User`; enum
+    `FeedLayout`; migración `20260901120000_add_posts_and_feed_settings` (incluye el índice
+    **GIN** sobre `tags` que la búsqueda de la Fase 9 y la afinidad de la Fase 5 van a usar).
+  - **Etiquetas** en `src/posts/utils/tags.util.ts`, un solo lugar: explícitas del cliente +
+    `#hashtags` de la descripción, minúsculas, sin `#`, solo `[a-z0-9_áéíóúñü-]`, 30 caracteres
+    por etiqueta, sin duplicadas y en orden de aparición; más de 10 → `400`. Al editar la
+    descripción se recalculan aunque el cliente no mande `tags`.
+  - **Orden curado:** `position` asc con desempate por `id`. La publicación nueva entra
+    **primera** (`position: 0`, las demás suben un puesto en la misma transacción). `reorder`
+    exige la lista **completa** de ids del autor (misma cantidad, sin repetidos, todos suyos) y
+    persiste el índice del arreglo.
+  - **Ajustes de feed:** `PATCH /api/users/me` acepta `{ feedSettings: { layout?, columns?, gap? } }`
+    (parcial dentro de parcial) y `feedSettings` viaja en todo `UserPublic` **extendido**; en la
+    vista limitada de un perfil privado se omite, igual que `bio`. Cierra la ambigüedad #4 de la
+    Fase 0, que quedaba esperando estas columnas.
+  - **Frontera de dominios respetada** (regla 7 / `ARCHITECTURE.md`): `posts` no consulta
+    `users`, `folders` ni `file_assets` con Prisma. Para eso `UsersService` expone
+    `canViewContentOf` y `getPublicViewsByIds`, y `FilesService` expone `findOwnedByUser` y
+    `findManyByIds` (`FilesModule` ahora exporta su servicio).
+  - **Piezas transversales nuevas en `src/common`:** `dto/cursor-pagination.dto.ts`
+    (`CursorPaginationDto` + `CursorPage<T>`, default 20 / máx 50) y `pagination/cursor.util.ts`
+    (cursor base64 opaco; uno corrupto es `400`, no `500`). Las reusarán el home feed (Fase 3),
+    los likes (Fase 4) y la búsqueda (Fase 9).
+  - **Borrado bloqueado:** `post_media` → `file_assets` con `onDelete: Restrict`. `DELETE
+    /api/files/:id` responde `409` si el archivo está publicado (y **la fila se borra antes que
+    el binario**, para no dejar una publicación apuntando a un objeto inexistente);
+    `DELETE /api/folders/:id` responde `409` si algún archivo del subárbol está publicado.
+  - **Pruebas:** `src/posts/posts.service.spec.ts` (28 casos: etiquetas, orden de medios,
+    posiciones, cursor, visibilidad, reorder, edición y borrado) y `src/posts/utils/tags.util.spec.ts`;
+    casos nuevos en `users.service.spec.ts` (feedSettings y `canViewContentOf`),
+    `files.service.spec.ts` y `folders.service.spec.ts` (el `409` y el orden fila → S3).
+  - **Verificación:** `npm run lint`, `npm run build` y `npm test` (7 suites, 98 tests) en verde.
+- **Ambigüedades reales resueltas (opción más simple compatible con las specs — revisar):**
+  1. **De dónde salen `width`/`height` de un medio.** El contrato los exige para el masonry,
+     pero el binario nunca pasa por el backend (subida directa a S3), así que el servidor no
+     puede medirlos. Elegido: los **declara el cliente** al publicar y se guardan en
+     `PostMedia` (no en `FileAsset`, que además cambiaría una respuesta que los dos clientes ya
+     consumen); se devuelven como `number | null` — nulos en audio/texto. Anotado en
+     `API-CONTRACTS.md` y `DATA-MODEL.md`.
+  2. **Qué pasa al borrar un archivo publicado.** `DATA-MODEL.md` decía "bloquearse o marcarse".
+     Elegido **bloquear** con FK `Restrict` (→ `409`), incluido el borrado de carpetas: una
+     publicación sin medio es una publicación rota, y el usuario tiene la salida a mano.
+  3. **Dónde viven los ajustes de feed.** `DATA-MODEL.md` dejaba abierto "User o tabla 1–1".
+     Elegido **columnas en `User`**: siempre se leen junto al perfil.
+  4. **Dónde entra una publicación nueva.** Nadie lo especifica. Elegido `position: 0`
+     (primera, como Instagram), empujando las demás en la misma transacción.
+  5. **Endpoints del CRUD.** `API-CONTRACTS.md` definía la forma de `Post`, `reorder` y
+     `feedSettings`, pero no cómo se crea/edita/lista/borra. Se agregaron con la forma mínima
+     coherente con el resto (sección "Publicaciones — Fase 2"), sin inventar campos nuevos.
+  6. **Topes sin especificar:** 1–10 medios por publicación y 2200 caracteres de descripción
+     (validación de DTO). Son topes de cordura, no reglas de producto: cambiarlos es una línea.
+  7. **Visibilidad del listado ajeno:** perfil privado → `403` (no una lista vacía), para que el
+     cliente distinga "no puedo ver esto" de "no hay publicaciones".
+  8. **Borrar deja huecos en `position`** a propósito (renumerar sería escritura masiva inútil).
+- **Falta:**
+  - Likes, guardados y comentarios: `likeCount` (solo para el autor), `commentCount`,
+    `viewerHasLiked` y `viewerHasSaved` responden `0`/`false` porque hoy ese **es** el valor
+    real; se llenan en la Fase 4.
+  - `GET /api/feed` (home) y la regla de visibilidad por **follow mutuo**: Fase 3. Hoy la regla
+    vive centralizada en `UsersService.canViewContentOf`, lista para mudarse al helper de
+    `social` sin tocar `posts`.
+  - **Objetos huérfanos en S3** al borrar carpetas: sigue igual que en la Fase 1 (el `409` nuevo
+    solo cubre los archivos publicados, no el hueco de fondo).
+  - Sin verificación end-to-end contra Postgres/MinIO reales: no hay base de datos en este
+    entorno. Verificado por lint, build, tipos y pruebas unitarias, y la migración se generó con
+    `prisma migrate diff` (no a mano) para que coincida exactamente con el esquema.
+- **Necesito:** que el dueño revise las 8 ambigüedades de arriba, sobre todo la #1 (dimensiones
+  declaradas por el cliente), la #2 (bloquear el borrado de archivos publicados, que también
+  frena borrar carpetas) y la #4 (publicación nueva primera). Sigue pendiente de decisión el
+  hueco de los huérfanos en S3 (evento `folder.deleted` vs. barrido por prefijo).
+- **Sigue:** Fase 3 del `ROADMAP.md` (módulo `social`: `Follow` con favoritos, helper único de
+  visibilidad y `GET /api/feed` v1). Los clientes ya pueden consumir toda la Fase 2: crear
+  publicaciones desde la biblioteca, ver el feed de un perfil, reordenarlo y configurar
+  layout/columnas/espaciado.
+
 ### 2026-09-01 — Fase 1: biblioteca completa (cierre de fase)
 - **Listo:**
   - **Sub-carpetas.** `Folder.parentId` (FK autorreferente `ON DELETE CASCADE`), migración
