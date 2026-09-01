@@ -10,6 +10,7 @@ import configuration from './config/configuration';
 import { envValidationSchema } from './config/env.validation';
 import { FilesModule } from './files/files.module';
 import { FoldersModule } from './folders/folders.module';
+import { PostsModule } from './posts/posts.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
@@ -29,6 +30,7 @@ import { UsersModule } from './users/users.module';
     AuthModule,
     FoldersModule,
     FilesModule,
+    PostsModule,
     AdminModule,
   ],
   controllers: [AppController],

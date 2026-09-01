@@ -10,10 +10,13 @@ lógica**. Ver `docs/ARCHITECTURE.md` ("Eventos de dominio como columna vertebra
 - `EventEmitterModule.forRoot()` se registra en `src/app.module.ts` (global); este módulo no
   tiene un `.module.ts` propio porque no expone providers, solo tipos.
 
-## Estado (Fase 0)
-Solo scaffold: **nadie emite ni escucha estos eventos todavía**. Los productores llegan con
-`posts`/`social`/`chat` (Fases 2, 3, 6) y los consumidores con `ranking`/`notifications`
-(Fases 5 y 7).
+## Estado (Fase 2)
+- **Productores:** `posts` emite `post.created` (`{ postId, authorId, tags }`) al publicar.
+- **Consumidores:** ninguno todavía. `ranking` (Fase 5) y `notifications` (Fase 7) son los que
+  van a escuchar; hasta entonces el evento se emite y nadie lo atiende, que es exactamente lo
+  que esta arquitectura busca (el productor no sabe quién escucha).
+- El resto de los eventos siguen siendo scaffold: sus productores llegan con `social`/`chat`
+  (Fases 3, 4 y 6).
 
 ## Reglas del módulo
 - Aquí no vive lógica: ni listeners (`@OnEvent`), ni emisión (`EventEmitter2.emit`). Eso vive en
