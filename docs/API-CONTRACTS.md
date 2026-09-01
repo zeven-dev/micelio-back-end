@@ -112,7 +112,42 @@ concurrentes y hace el optimistic update trivial en los clientes.
 ### Ajustes de feed — `PATCH /api/users/me`
 Acepta parcial: `{ "feedSettings": { "layout"?, "columns"?, "gap"? } }` además de
 `name?, bio?, isPublic?`. Validación: `columns` entero 1–6; `gap` entero 0–5;
-`layout` ∈ {GRID, MASONRY}. Avatar aparte: `PATCH /api/users/me/avatar` (multipart).
+`layout` ∈ {GRID, MASONRY}. Avatar aparte: ver "Subida directa a S3" abajo.
+
+### Subida directa a S3 (Fase 0.5) — biblioteca y avatar
+Los binarios **nunca** pasan por el backend: el cliente sube directo a S3 con una URL firmada
+de escritura; el backend solo entrega la URL y confirma después de que el objeto ya existe en
+el bucket. Patrón idéntico en ambos recursos, dos pasos:
+
+1. **Presign** — el cliente declara los metadatos, nunca sube bytes todavía.
+   - Biblioteca: `POST /api/folders/:folderId/files/presign`
+     body `{ "originalName": "string", "mimeType": "string", "size": number }` →
+     `{ "key": "string", "uploadUrl": "string", "expiresIn": number }`.
+   - Avatar: `POST /api/users/me/avatar/presign` body `{ "mimeType": "string", "size": number }`
+     → misma forma de respuesta.
+   - Valida propiedad de la carpeta (biblioteca), mimeType/tamaño permitido (mismas reglas que
+     antes: `MAX_FILE_SIZE_BYTES` por tipo en biblioteca, JPEG/PNG/WEBP ≤ 5 MB en avatar) y
+     genera la `key` (mismo prefijo que siempre: `users/{userId}/folders/{folderId}/{uuid}.ext`
+     y `avatars/{userId}/{uuid}.ext`).
+2. **Upload** — el cliente hace `PUT <uploadUrl>` con el binario y el header
+   `Content-Type` **exactamente igual** al `mimeType` declarado (la URL está firmada para ese
+   content-type; si no coincide, S3 responde `403`). Este PUT va directo al bucket, sin pasar
+   por `/api`.
+3. **Confirm** — solo después de que el PUT anterior responda `200`.
+   - Biblioteca: `POST /api/folders/:folderId/files/confirm`
+     body `{ "key", "originalName", "mimeType", "size" }` → `FileAsset` (forma sin cambios:
+     `{ id, folderId, originalName, mimeType, type, size, url, createdAt }`).
+   - Avatar: `PATCH /api/users/me/avatar` body `{ "key": "string" }` → `Me` (sin cambios de
+     forma).
+   - El backend verifica con `HeadObject` que el objeto **ya existe** en S3 antes de crear el
+     registro (`404` si no); también verifica que la `key` tenga el prefijo esperado del dueño
+     (`403` si no) — evita que un cliente registre metadatos de un archivo que nunca subió o de
+     una key ajena.
+
+**Requisito de infraestructura (fuera de este repo):** el bucket S3 debe tener una política CORS
+que permita `PUT` (y el header `Content-Type`) desde los orígenes de la web y la app; sin eso,
+el navegador bloquea el paso 2 aunque el backend esté bien. No hay bandera de entorno para esto
+en el backend — se configura directamente en el bucket.
 
 ### Likes — Fase 4
 - `POST /api/posts/:id/like` → `{ "liked": true }` (idempotente; repetir no duplica).

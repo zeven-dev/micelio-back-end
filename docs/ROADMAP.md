@@ -31,6 +31,19 @@ la misma tarea.
 - [x] **Perfil**: `GET/PATCH /api/users/me` (bio, nombre, avatar vía `StorageService`,
   **toggle `isPublic`**) y `GET /api/users/:username` (perfil público / limitado si privado).
 
+## Fase 0.5 — Subida directa a S3 (rediseño visual, solo clientes) — **cerrada 2026-09-01**
+- [x] **Subida directa a S3** para biblioteca y avatar: el back deja de recibir binarios
+  (se quita Multer/`FileInterceptor` de `files` y `users`) y en su lugar expone
+  presign + confirm (`POST .../files/presign`, `POST .../files/confirm`,
+  `POST /api/users/me/avatar/presign`, `PATCH /api/users/me/avatar` ahora con `{ key }`).
+  *Dónde:* `src/storage` (`getSignedUploadUrl`, `headObject`), `src/files`, `src/users`. *Por
+  qué:* pedido explícito del dueño del producto — "que se carguen directamente las imágenes al
+  S3"; además reduce carga del servidor en archivos grandes (video hasta 250 MB). Contrato
+  exacto en `docs/API-CONTRACTS.md` ("Subida directa a S3").
+- *(El resto de la Fase 0.5 — quitar el sidebar, navegación tipo Instagram, perfil rediseñado,
+  Home preparado, Carpetas migradas al perfil — es rediseño visual puro y vive enteramente en
+  `micelio-front-end` y `micelio-app`; este repo no tiene tareas de diseño.)*
+
 ## Fase 1 — Biblioteca completa
 - [ ] **Sub-carpetas**: `parentId` en `Folder`, validación de ciclos, unicidad
   (userId, parentId, name). *Dónde:* `src/folders`.

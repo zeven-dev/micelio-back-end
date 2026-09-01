@@ -20,6 +20,45 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-01 — Fase 0.5: subida directa a S3 (cierre de fase, solo back-end)
+- **Listo:**
+  - `StorageService` cambia su interfaz: se quita `upload(buffer)` (ya no tiene llamadores) y se
+    agregan `getSignedUploadUrl(key, contentType, expiresInSeconds?)` (URL firmada de escritura,
+    `PutObjectCommand`) y `headObject(key)` (`HeadObjectCommand`, `null` si el objeto no existe
+    todavía) — `src/storage/storage.service.ts`, `src/storage/s3-storage.service.ts`.
+  - `src/files`: `POST /api/folders/:id/files` (multipart) se reemplaza por
+    `POST .../files/presign` (valida carpeta + mimeType/tamaño, devuelve
+    `{ key, uploadUrl, expiresIn }`) y `POST .../files/confirm` (valida prefijo de `key` +
+    `HeadObject`, crea el `FileAsset`). Se quitó `FileInterceptor`/Multer del controlador; el
+    backend ya no recibe binarios de biblioteca. DTOs nuevos en `src/files/dto/`
+    (`presign-file.dto.ts`, `confirm-file.dto.ts`, `presign-response.dto.ts`).
+  - `src/users`: mismo patrón para el avatar. `POST /api/users/me/avatar/presign` (JSON
+    `{ mimeType, size }`) + `PATCH /api/users/me/avatar` ahora JSON `{ key }` (antes multipart).
+    DTOs nuevos en `src/users/dto/` (`presign-avatar.dto.ts`, `confirm-avatar.dto.ts`,
+    `presign-avatar-response.dto.ts`).
+  - `docs/API-CONTRACTS.md`, `docs/PROCESSES.md`, `src/storage/AGENTS.md`,
+    `src/files/AGENTS.md`, `src/users/AGENTS.md` actualizados con el contrato de dos pasos
+    (presign → `PUT` directo del cliente a S3 → confirm) y la nota de infraestructura: el
+    bucket necesita su propia política **CORS** que permita `PUT` con `Content-Type` desde los
+    orígenes de la web y la app — no es algo configurable desde este repo.
+  - `src/users/users.service.spec.ts` reescrito para el nuevo flujo (`presignAvatar`,
+    `updateAvatar` con `ForbiddenException`/`NotFoundException`); `npm run lint`, `npm run
+    build` y `npm test` (4 suites, 26 tests) en verde.
+- **Falta:** nada de la parte de back-end de esta fase. El resto de la Fase 0.5 (quitar sidebar,
+  navegación tipo Instagram, perfil rediseñado, Home preparado, Carpetas migradas al perfil) es
+  rediseño visual puro y no toca este repo — ver `docs/ROADMAP.md`.
+- **Necesito:**
+  - **CORS del bucket S3**, fuera de este repo: sin esa política, el `PUT` directo del navegador
+    falla aunque el backend esté perfecto. No hay bandera de entorno para esto — se configura en
+    AWS directamente.
+  - No hay `.env` real en este sandbox (solo `.env.example`, con credenciales de MinIO); el
+    dueño confirmó que las variables de AWS reales ya están seteadas en el entorno de destino.
+    No se pudo hacer una verificación end-to-end contra S3/MinIO real en esta tarea —
+    verificado por lectura de código, tipos, lint, build y tests unitarios únicamente.
+- **Sigue:** cuando la web y la app integren el nuevo flujo (presign → PUT directo → confirm),
+  probar con un bucket real o MinIO local (`docker compose up -d`) antes de dar por cerrado el
+  camino feliz de subida.
+
 ### 2026-08-31 — Fase 0: identidad, roles y arquitectura (cierre de fase)
 - **Listo:**
   - `User` ampliado en `prisma/schema.prisma` con `cedula`, `username`, `role` (enum `Role`),

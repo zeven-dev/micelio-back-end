@@ -1,19 +1,10 @@
-import {
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Post,
-  UploadedFile,
-  UseInterceptors,
-} from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ConfirmFileDto } from './dto/confirm-file.dto';
+import { PresignFileDto } from './dto/presign-file.dto';
 import { FilesService } from './files.service';
-
-const MAX_UPLOAD_SIZE_BYTES = 250 * 1024 * 1024; // ceiling; per-type limits enforced in the service
 
 @ApiTags('files')
 @ApiBearerAuth()
@@ -26,21 +17,22 @@ export class FilesController {
     return this.filesService.findAllForFolder(folderId, user.id);
   }
 
-  @Post('folders/:folderId/files')
-  @ApiConsumes('multipart/form-data')
-  @UseInterceptors(
-    // No `storage`/`dest` option: Multer keeps the file in memory (as a Buffer)
-    // instead of writing it to local disk, since it goes straight to S3.
-    FileInterceptor('file', {
-      limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
-    }),
-  )
-  upload(
+  @Post('folders/:folderId/files/presign')
+  presign(
     @Param('folderId') folderId: string,
-    @UploadedFile() file: Express.Multer.File,
+    @Body() dto: PresignFileDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.filesService.upload(folderId, user.id, file);
+    return this.filesService.presign(folderId, user.id, dto);
+  }
+
+  @Post('folders/:folderId/files/confirm')
+  confirm(
+    @Param('folderId') folderId: string,
+    @Body() dto: ConfirmFileDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.filesService.confirm(folderId, user.id, dto);
   }
 
   @Delete('files/:id')

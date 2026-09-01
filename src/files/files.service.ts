@@ -1,30 +1,28 @@
 import {
-  BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
   PayloadTooLargeException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 import { FoldersService } from '../folders/folders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
+import { ConfirmFileDto } from './dto/confirm-file.dto';
 import { FileResponseDto } from './dto/file-response.dto';
+import { PresignFileDto } from './dto/presign-file.dto';
+import { PresignResponseDto } from './dto/presign-response.dto';
 import { MAX_FILE_SIZE_BYTES, resolveFileType } from './utils/file-type.util';
-
-type UploadedFile = {
-  originalname: string;
-  mimetype: string;
-  size: number;
-  buffer: Buffer;
-};
 
 @Injectable()
 export class FilesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly foldersService: FoldersService,
+    private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
   ) {}
 
@@ -37,39 +35,57 @@ export class FilesService {
     return Promise.all(files.map((file) => this.toResponseDto(file)));
   }
 
-  async upload(
+  async presign(
     folderId: string,
     userId: string,
-    file: UploadedFile | undefined,
-  ): Promise<FileResponseDto> {
-    if (!file) {
-      throw new BadRequestException('No se recibió ningún archivo');
-    }
-
+    dto: PresignFileDto,
+  ): Promise<PresignResponseDto> {
     await this.foldersService.findOneOrFail(folderId, userId);
 
-    const type = resolveFileType(file.mimetype);
-    if (file.size > MAX_FILE_SIZE_BYTES[type]) {
+    const type = resolveFileType(dto.mimeType);
+    if (dto.size > MAX_FILE_SIZE_BYTES[type]) {
       throw new PayloadTooLargeException(
         `El archivo supera el tamaño máximo permitido para ${type.toLowerCase()}`,
       );
     }
 
-    const key = `users/${userId}/folders/${folderId}/${randomUUID()}${extname(file.originalname)}`;
-    await this.storageService.upload({
-      key,
-      body: file.buffer,
-      contentType: file.mimetype,
-    });
+    const key = `users/${userId}/folders/${folderId}/${randomUUID()}${extname(dto.originalName)}`;
+    const expiresIn = this.configService.get<number>('s3.signedUrlExpiresIn') ?? 300;
+    const uploadUrl = await this.storageService.getSignedUploadUrl(key, dto.mimeType, expiresIn);
+
+    return { key, uploadUrl, expiresIn };
+  }
+
+  async confirm(folderId: string, userId: string, dto: ConfirmFileDto): Promise<FileResponseDto> {
+    await this.foldersService.findOneOrFail(folderId, userId);
+
+    const expectedPrefix = `users/${userId}/folders/${folderId}/`;
+    if (!dto.key.startsWith(expectedPrefix)) {
+      throw new ForbiddenException('La key subida no corresponde a esta carpeta');
+    }
+
+    const type = resolveFileType(dto.mimeType);
+    if (dto.size > MAX_FILE_SIZE_BYTES[type]) {
+      throw new PayloadTooLargeException(
+        `El archivo supera el tamaño máximo permitido para ${type.toLowerCase()}`,
+      );
+    }
+
+    const uploaded = await this.storageService.headObject(dto.key);
+    if (!uploaded) {
+      throw new NotFoundException(
+        'El archivo todavía no llegó a S3; sube el binario antes de confirmar',
+      );
+    }
 
     const created = await this.prisma.fileAsset.create({
       data: {
         folderId,
-        originalName: file.originalname,
-        key,
-        mimeType: file.mimetype,
+        originalName: dto.originalName,
+        key: dto.key,
+        mimeType: dto.mimeType,
         type,
-        size: file.size,
+        size: dto.size,
       },
     });
 
