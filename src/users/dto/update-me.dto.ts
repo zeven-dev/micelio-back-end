@@ -1,5 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsBoolean, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import { FeedSettingsDto } from './feed-settings.dto';
 
 export class UpdateMeDto {
   @ApiPropertyOptional({ example: 'Ada Lovelace' })
@@ -18,4 +20,10 @@ export class UpdateMeDto {
   @IsOptional()
   @IsBoolean()
   isPublic?: boolean;
+
+  @ApiPropertyOptional({ type: FeedSettingsDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => FeedSettingsDto)
+  feedSettings?: FeedSettingsDto;
 }

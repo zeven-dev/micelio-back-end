@@ -8,7 +8,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Role, User } from '@prisma/client';
+import { FeedLayout, Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { BYTES_PER_MB } from '../files/utils/file-type.util';
 import { PrismaService } from '../prisma/prisma.service';
@@ -28,6 +28,12 @@ export interface CreateUserData {
   cedula: string;
 }
 
+export interface FeedSettingsView {
+  layout: FeedLayout;
+  columns: number;
+  gap: number;
+}
+
 export interface UserPublicView {
   id: string;
   username: string;
@@ -39,6 +45,7 @@ export interface UserPublicView {
   viewerFollows: boolean;
   followsViewer: boolean;
   bio?: string | null;
+  feedSettings?: FeedSettingsView;
 }
 
 export interface MeView extends UserPublicView {
@@ -90,7 +97,16 @@ export class UsersService {
     await this.requireById(userId);
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { name: dto.name, bio: dto.bio, isPublic: dto.isPublic },
+      data: {
+        name: dto.name,
+        bio: dto.bio,
+        isPublic: dto.isPublic,
+        // `feedSettings` es parcial dentro de parcial: las claves ausentes quedan como estaban
+        // (`undefined` no escribe en Prisma).
+        feedLayout: dto.feedSettings?.layout,
+        feedColumns: dto.feedSettings?.columns,
+        feedGap: dto.feedSettings?.gap,
+      },
     });
     const publicView = await this.toUserPublic(updated, { includeExtended: true });
     return { ...publicView, email: updated.email, role: updated.role };
@@ -179,6 +195,41 @@ export class UsersService {
     return this.toUserPublic(user, { includeExtended: hasAccess });
   }
 
+  /**
+   * ¿Puede `viewerId` ver el contenido de `ownerId`? Fase 2: el dueño siempre; cualquiera si el
+   * perfil es público. El **follow mutuo** llega en la Fase 3 con el módulo `social`, que se
+   * lleva esta regla a su helper único — hasta entonces vive aquí, en un solo lugar, para que
+   * `posts` no la reimplemente.
+   */
+  async canViewContentOf(ownerId: string, viewerId?: string): Promise<boolean> {
+    if (viewerId !== undefined && viewerId === ownerId) {
+      return true;
+    }
+    const owner = await this.prisma.user.findUnique({
+      where: { id: ownerId },
+      select: { isPublic: true },
+    });
+    return owner?.isPublic ?? false;
+  }
+
+  /**
+   * `UserPublic` de varios usuarios de una sola vez, indexado por id. Lo usan los módulos que
+   * embeben autores en sus respuestas (`posts`) sin consultar la tabla `users` por su cuenta.
+   */
+  async getPublicViewsByIds(
+    ids: string[],
+    viewerId?: string,
+  ): Promise<Map<string, UserPublicView>> {
+    const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set(ids)] } } });
+    const views = await Promise.all(
+      users.map(async (user) => {
+        const hasAccess = (viewerId !== undefined && user.id === viewerId) || user.isPublic;
+        return [user.id, await this.toUserPublic(user, { includeExtended: hasAccess })] as const;
+      }),
+    );
+    return new Map(views);
+  }
+
   private async requireById(id: string): Promise<User> {
     const user = await this.findById(id);
     if (!user) {
@@ -212,6 +263,15 @@ export class UsersService {
     if (!opts.includeExtended) {
       return base;
     }
-    return { ...base, bio: user.bio ?? null };
+    return {
+      ...base,
+      bio: user.bio ?? null,
+      // Cómo curó el dueño su feed: los visitantes con acceso lo ven exactamente igual que él.
+      feedSettings: {
+        layout: user.feedLayout,
+        columns: user.feedColumns,
+        gap: user.feedGap,
+      },
+    };
   }
 }

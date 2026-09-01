@@ -14,6 +14,7 @@ describe('UsersService', () => {
   let prisma: {
     user: {
       findUnique: jest.Mock;
+      findMany: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
     };
@@ -32,12 +33,16 @@ describe('UsersService', () => {
     bio: null,
     avatarKey: null,
     isPublic: false,
+    feedLayout: 'GRID',
+    feedColumns: 3,
+    feedGap: 2,
   };
 
   beforeEach(() => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -135,6 +140,71 @@ describe('UsersService', () => {
       expect(result.email).toBe('ada@example.com');
       expect(result.role).toBe('USER');
       expect(result).not.toHaveProperty('cedula');
+    });
+  });
+
+  // Fase 2: el dueño cura cómo se ve su feed y quien tenga acceso lo ve igual.
+  describe('feedSettings', () => {
+    it('viaja con el perfil de quien tiene acceso', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        isPublic: true,
+        feedLayout: 'MASONRY',
+        feedColumns: 4,
+        feedGap: 1,
+      });
+
+      const result = await usersService.getPublicProfile('ada', 'other-user');
+
+      expect(result.feedSettings).toEqual({ layout: 'MASONRY', columns: 4, gap: 1 });
+    });
+
+    it('se omite en la vista limitada de un perfil privado', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: false });
+
+      const result = await usersService.getPublicProfile('ada', 'other-user');
+
+      expect(result.feedSettings).toBeUndefined();
+    });
+
+    it('updateMe escribe solo las claves presentes', async () => {
+      prisma.user.findUnique.mockResolvedValue(baseUser);
+      prisma.user.update.mockResolvedValue(baseUser);
+
+      await usersService.updateMe('user-1', { feedSettings: { columns: 5 } });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: {
+          name: undefined,
+          bio: undefined,
+          isPublic: undefined,
+          feedLayout: undefined,
+          feedColumns: 5,
+          feedGap: undefined,
+        },
+      });
+    });
+  });
+
+  // Regla de visibilidad de la Fase 2 (el follow mutuo llega con `social`, Fase 3).
+  describe('canViewContentOf', () => {
+    it('el dueño siempre puede', async () => {
+      await expect(usersService.canViewContentOf('user-1', 'user-1')).resolves.toBe(true);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('un tercero solo si el perfil es público', async () => {
+      prisma.user.findUnique.mockResolvedValue({ isPublic: true });
+      await expect(usersService.canViewContentOf('user-1', 'otro')).resolves.toBe(true);
+
+      prisma.user.findUnique.mockResolvedValue({ isPublic: false });
+      await expect(usersService.canViewContentOf('user-1', 'otro')).resolves.toBe(false);
+    });
+
+    it('un usuario inexistente no muestra contenido', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(usersService.canViewContentOf('fantasma')).resolves.toBe(false);
     });
   });
 

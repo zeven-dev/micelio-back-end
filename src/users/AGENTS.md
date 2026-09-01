@@ -6,8 +6,10 @@ otro módulo).
 
 ## Contrato actual (Fase 0; avatar rehecho a subida directa en Fase 0.5)
 - `GET /api/users/me` — `Me` completo (`UserPublic` + `email` + `role`); nunca incluye `cedula`.
-- `PATCH /api/users/me` — parcial `{ name?, bio?, isPublic? }`. `feedSettings` **no** se acepta
-  todavía (llega en la Fase 2 con los campos de layout del feed).
+- `PATCH /api/users/me` — parcial `{ name?, bio?, isPublic?, feedSettings? }`. `feedSettings`
+  es parcial dentro de parcial (`{ layout?, columns?, gap? }`, Fase 2): la clave ausente no se
+  toca. `columns` 1–6, `gap` 0–5 (índice de la escala de espaciado del design system, no
+  píxeles), `layout` ∈ {GRID, MASONRY}.
 - `POST /api/users/me/avatar/presign` (JSON `{ mimeType, size }`) — valida tipo/tamaño
   (`image/jpeg|png|webp`, tope propio `UPLOAD_MAX_AVATAR_MB` — **no** el de las imágenes de
   biblioteca) y devuelve `{ key, uploadUrl, expiresIn }`; el cliente sube
@@ -28,13 +30,21 @@ otro módulo).
 - `users.service.ts` — búsqueda por id/email/username/cedula, creación (usado por `auth`),
   `updateRole` (usado por `admin`), y las vistas `UserPublicView`/`MeView` que arma
   `toUserPublic()`.
+- **Servicios públicos que consume `posts` (Fase 2)**, para que ningún módulo lea la tabla
+  `users` por su cuenta:
+  - `canViewContentOf(ownerId, viewerId?)` — regla de visibilidad **única**: el dueño siempre,
+    y cualquiera si el perfil es público. En la Fase 3 esta regla se muda al helper de `social`
+    (follow mutuo); quien la llame no debería notar el cambio.
+  - `getPublicViewsByIds(ids, viewerId?)` — `UserPublic` de varios usuarios de un golpe
+    (evita una consulta y una firma de avatar por publicación).
 
 ## Desviaciones documentadas de `API-CONTRACTS.md` (ver también `docs/STATUS.md`)
 - `followersCount`, `followingCount`, `viewerFollows`, `followsViewer`: siempre `0`/`false`
   hasta que exista `Follow` (módulo `social`, Fase 3). No son un placeholder falso: hoy es el
   valor real (nadie sigue a nadie todavía).
-- `feedSettings` se omite por completo del `UserPublic` extendido hasta la Fase 2 (los campos
-  `feedLayout/feedColumns/feedGap` no existen aún en el esquema).
+- `feedSettings` ya existe desde la Fase 2 (`feedLayout/feedColumns/feedGap` en `User`) y viaja
+  en todo `UserPublic` **extendido**; en la vista limitada de un perfil privado se omite, igual
+  que `bio`. Valores por defecto: `GRID`, 3 columnas, gap 2.
 
 ## Reglas del módulo
 - Nunca exponer `passwordHash` ni `cedula` en respuestas públicas; la cédula es dato sensible de
