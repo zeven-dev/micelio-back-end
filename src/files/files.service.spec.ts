@@ -1,9 +1,11 @@
 import {
+  ConflictException,
   NotFoundException,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@prisma/client';
 import { FoldersService } from '../folders/folders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
@@ -149,6 +151,35 @@ describe('FilesService', () => {
 
       expect(storage.delete).toHaveBeenCalledWith(confirmDto.key);
       expect(prisma.fileAsset.create).not.toHaveBeenCalled();
+    });
+  });
+  // Fase 2: `post_media` referencia `file_assets` con `Restrict`, así que un archivo publicado
+  // no se puede borrar. La fila va primero justo para no dejar la publicación sin binario.
+  describe('remove', () => {
+    beforeEach(() => {
+      prisma.fileAsset.findUnique.mockResolvedValue({
+        id: 'file-1',
+        folderId: 'folder-1',
+        key: 'users/user-1/folders/folder-1/1.png',
+      });
+    });
+
+    it('deletes the row first and then the object in S3', async () => {
+      await filesService.remove('file-1', 'user-1');
+
+      expect(prisma.fileAsset.delete).toHaveBeenCalledWith({ where: { id: 'file-1' } });
+      expect(storage.delete).toHaveBeenCalledWith('users/user-1/folders/folder-1/1.png');
+    });
+
+    it('responds 409 and keeps the binary when the file is used in a post', async () => {
+      prisma.fileAsset.delete.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('FK', { code: 'P2003', clientVersion: '5' }),
+      );
+
+      await expect(filesService.remove('file-1', 'user-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(storage.delete).not.toHaveBeenCalled();
     });
   });
 });

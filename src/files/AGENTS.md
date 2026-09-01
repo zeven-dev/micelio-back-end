@@ -9,7 +9,8 @@ Estos archivos son la **biblioteca de publicaciones** del usuario.
   backend).
 - `POST /api/folders/:id/files/confirm` — valida prefijo de `key` + `HeadObject` (el objeto debe
   existir ya en S3) y recién ahí crea el `FileAsset`.
-- `GET /api/folders/:id/files`, `DELETE /api/files/:id` sin cambios de forma.
+- `GET /api/folders/:id/files`, `DELETE /api/files/:id` sin cambios de forma. Desde la Fase 2,
+  `DELETE` responde **`409`** si el archivo está en una publicación (ver abajo).
 - Detalle completo de los dos pasos en `docs/API-CONTRACTS.md` ("Subida directa a S3").
 
 ## Límites de peso
@@ -33,9 +34,15 @@ paso: sin fila en la base, nadie volvería a encontrarlo para limpiarlo.
   Todo el peso del archivo va directo del cliente al bucket con la URL firmada.
 - Los adjuntos de chat NO usan este módulo ni `FileAsset` — serán `ChatAttachment` en el módulo
   `chat` (decisión de producto: biblioteca y chat son cosas separadas).
-- Al borrar un `FileAsset`, borrar también el objeto S3. Cuando existan publicaciones (Fase 2),
-  impedir/gestionar el borrado de archivos referenciados por un `Post` y documentar la decisión
-  en `docs/DATA-MODEL.md`.
+- Al borrar un `FileAsset`, borrar también el objeto S3 — pero **la fila va primero**: desde la
+  Fase 2 `post_media` referencia `file_assets` con `onDelete: Restrict`, así que un archivo
+  publicado no se puede borrar (`P2003` → `409` con mensaje claro). Si se borrara el binario
+  antes, una publicación viva quedaría apuntando a un objeto inexistente. Decisión registrada en
+  `docs/DATA-MODEL.md` (bloquear, no cascadear ni marcar).
+- **Servicios públicos para otros dominios (regla 7):** `findOwnedByUser(ids, userId)` (valida
+  propiedad vía `FoldersService`; `404`/`403`) y `findManyByIds(ids)` (sin control de propiedad,
+  para contenido ajeno ya autorizado por quien llama). Los usa `posts` para armar sus medios;
+  nadie más consulta `file_assets` con Prisma.
 - Tipos nuevos → actualizar `FileType` (schema + migración), `ALLOWED_MIME_TYPES`,
   `MAX_SIZE_CONFIG_KEY` y `FILE_TYPE_LABEL` en `utils/file-type.util.ts`, la variable
   `UPLOAD_MAX_<TIPO>_MB` en los tres sitios que exige `src/config/AGENTS.md`, y

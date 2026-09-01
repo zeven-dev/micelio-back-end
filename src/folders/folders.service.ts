@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Folder } from '@prisma/client';
+import { isForeignKeyViolation } from '../common/utils/prisma-errors.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
@@ -100,8 +101,19 @@ export class FoldersService {
   async remove(id: string, userId: string) {
     await this.findOneOrFail(id, userId);
     // La FK autorreferente es ON DELETE CASCADE: borrar una carpeta se lleva sus sub-carpetas
-    // y, por la FK de `file_assets`, las filas de sus archivos.
-    await this.prisma.folder.delete({ where: { id } });
+    // y, por la FK de `file_assets`, las filas de sus archivos. Esa cascada se detiene si algún
+    // archivo del subárbol está en una publicación (`post_media` referencia con `Restrict`):
+    // Postgres aborta el borrado completo y aquí se traduce a 409 en vez de un 500.
+    try {
+      await this.prisma.folder.delete({ where: { id } });
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new ConflictException(
+          'Esta carpeta contiene archivos usados en publicaciones; borra primero esas publicaciones',
+        );
+      }
+      throw error;
+    }
   }
 
   private async buildPath(folder: Folder): Promise<FolderPathItem[]> {

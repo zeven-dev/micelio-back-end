@@ -19,6 +19,14 @@
   de programación, no una ruta abierta); si los declara, exige que `request.user.role` esté en
   la lista o responde `403`. Se registra como `APP_GUARD` en `src/auth/auth.module.ts`,
   **después** de `JwtAuthGuard` (necesita `request.user` ya poblado).
+- `dto/cursor-pagination.dto.ts` — `CursorPaginationDto` (`?cursor=&limit=`, default 20, máx
+  50) y el tipo `CursorPage<T>` (`{ items, nextCursor }`) de la paginación estándar del
+  `API-CONTRACTS.md`. Es transversal a propósito: feed propio (Fase 2), home, búsqueda y likes
+  responden con la misma forma.
+- `pagination/cursor.util.ts` — `encodeCursor`/`decodeCursor`: el cursor es base64 opaco de un
+  JSON interno y el cliente solo lo reenvía. Un cursor corrupto es `400`, nunca `500`.
+- `utils/prisma-errors.util.ts` — `isForeignKeyViolation` (`P2003`), para traducir a `409` los
+  borrados que frena una FK `Restrict` (archivo o carpeta con archivos publicados).
 
 ## Reglas del módulo
 - **Todo endpoint nuevo declara `@Roles(...)` o `@Public()`.** No es una convención que haya que

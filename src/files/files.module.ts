@@ -11,5 +11,8 @@ import { FilesService } from './files.service';
   imports: [FoldersModule, StorageModule],
   controllers: [FilesController],
   providers: [FilesService],
+  // `posts` (Fase 2) arma sus medios con `findOwnedByUser`/`findManyByIds` en vez de consultar
+  // `file_assets` por su cuenta: el cruce de dominios va por el servicio público (regla 7).
+  exports: [FilesService],
 })
 export class FilesModule {}

@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -9,6 +10,7 @@ import { ConfigService } from '@nestjs/config';
 import { FileType } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
+import { isForeignKeyViolation } from '../common/utils/prisma-errors.util';
 import { FoldersService } from '../folders/folders.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
@@ -22,6 +24,17 @@ import {
   MAX_SIZE_CONFIG_KEY,
   resolveFileType,
 } from './utils/file-type.util';
+
+/**
+ * Lo mínimo que otro módulo necesita de un archivo de biblioteca para construir su propia
+ * respuesta (hoy: `posts`, que arma los medios de una publicación). Es la frontera de este
+ * módulo: nadie más consulta `file_assets` con Prisma (regla 7 de `AGENTS.md`).
+ */
+export interface LibraryAssetRef {
+  id: string;
+  type: FileType;
+  key: string;
+}
 
 @Injectable()
 export class FilesService {
@@ -126,8 +139,54 @@ export class FilesService {
     }
     await this.foldersService.findOneOrFail(file.folderId, userId);
 
+    // La fila va primero: la FK `Restrict` de `post_media` puede frenar el borrado (el archivo
+    // está en una publicación) y borrar el binario antes dejaría la publicación apuntando a un
+    // objeto que ya no existe en S3.
+    try {
+      await this.prisma.fileAsset.delete({ where: { id } });
+    } catch (error) {
+      if (isForeignKeyViolation(error)) {
+        throw new ConflictException(
+          'No puedes borrar un archivo que está en una publicación; borra primero la publicación',
+        );
+      }
+      throw error;
+    }
     await this.storageService.delete(file.key);
-    await this.prisma.fileAsset.delete({ where: { id } });
+  }
+
+  /**
+   * Archivos de la biblioteca **del usuario**, para que otro módulo arme sus propios medios.
+   * Falla si alguno no existe (`404`) o no es suyo (`403`, vía `FoldersService`).
+   */
+  async findOwnedByUser(ids: string[], userId: string): Promise<LibraryAssetRef[]> {
+    const files = await this.prisma.fileAsset.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, type: true, key: true, folderId: true },
+    });
+    if (files.length !== new Set(ids).size) {
+      throw new NotFoundException('Alguno de los archivos no existe en tu biblioteca');
+    }
+    // La propiedad se comprueba por carpeta, que es de `folders`: una consulta por carpeta
+    // distinta, no por archivo.
+    const folderIds = [...new Set(files.map((file) => file.folderId))];
+    await Promise.all(
+      folderIds.map((folderId) => this.foldersService.findOneOrFail(folderId, userId)),
+    );
+
+    return files.map(({ id, type, key }) => ({ id, type, key }));
+  }
+
+  /**
+   * Los mismos datos sin control de propiedad: sirve para pintar los medios de contenido ajeno
+   * cuya visibilidad ya validó quien llama (p. ej. una publicación pública).
+   */
+  async findManyByIds(ids: string[]): Promise<LibraryAssetRef[]> {
+    const files = await this.prisma.fileAsset.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, type: true, key: true },
+    });
+    return files;
   }
 
   private async toResponseDto(file: {

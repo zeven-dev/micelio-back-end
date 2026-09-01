@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FoldersService } from './folders.service';
 
@@ -207,6 +208,28 @@ describe('FoldersService', () => {
         foldersService.update('root', 'user-1', { parentId: 'grandchild' }),
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(prisma.folder.update).not.toHaveBeenCalled();
+    });
+  });
+  // Fase 2: la cascada de carpeta → archivos se detiene si alguno está en una publicación
+  // (`post_media` referencia con `Restrict`); Postgres aborta el borrado completo.
+  describe('remove', () => {
+    it('translates the foreign key violation into a 409', async () => {
+      prisma.folder.findUnique.mockResolvedValue(root);
+      prisma.folder.delete.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('FK', { code: 'P2003', clientVersion: '5' }),
+      );
+
+      await expect(foldersService.remove('root', 'user-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+    });
+
+    it('deletes the folder when nothing blocks the cascade', async () => {
+      prisma.folder.findUnique.mockResolvedValue(root);
+
+      await foldersService.remove('root', 'user-1');
+
+      expect(prisma.folder.delete).toHaveBeenCalledWith({ where: { id: 'root' } });
     });
   });
 });

@@ -13,7 +13,9 @@
   mueve la carpeta; `parentId: null` la manda a la raíz.** (`class-transformer` solo asigna las
   claves presentes en el body, así que `undefined` y `null` se distinguen.)
 - `DELETE /api/folders/:id` — borra la carpeta, sus sub-carpetas y las filas de sus archivos
-  (FK autorreferente `ON DELETE CASCADE`).
+  (FK autorreferente `ON DELETE CASCADE`). Desde la Fase 2 responde **`409`** si algún archivo
+  del subárbol está en una publicación: `post_media` referencia `file_assets` con `Restrict`, la
+  cascada se detiene y Postgres aborta el borrado completo (`P2003`, traducido en el servicio).
 - Toda operación filtra por el `userId` del token: un usuario jamás ve ni mueve carpetas ajenas.
 
 Formas exactas en [`docs/API-CONTRACTS.md`](../../docs/API-CONTRACTS.md) ("Carpetas y
