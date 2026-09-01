@@ -16,7 +16,12 @@ import { ConfirmFileDto } from './dto/confirm-file.dto';
 import { FileResponseDto } from './dto/file-response.dto';
 import { PresignFileDto } from './dto/presign-file.dto';
 import { PresignResponseDto } from './dto/presign-response.dto';
-import { BYTES_PER_MB, MAX_FILE_SIZE_BYTES, resolveFileType } from './utils/file-type.util';
+import {
+  BYTES_PER_MB,
+  FILE_TYPE_LABEL,
+  MAX_SIZE_CONFIG_KEY,
+  resolveFileType,
+} from './utils/file-type.util';
 
 @Injectable()
 export class FilesService {
@@ -25,12 +30,22 @@ export class FilesService {
     private readonly foldersService: FoldersService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
-  ) { }
+  ) {}
 
   /** Peso máximo del tipo, leído de la configuración (`UPLOAD_MAX_*_MB`) en cada subida. */
-  // private maxBytesFor(type: FileType): number {
-  //   return this.configService.get<number>(MAX_FILE_SIZE_BYTES[type])! * BYTES_PER_MB;
-  // }
+  private maxBytesFor(type: FileType): number {
+    return this.configService.get<number>(MAX_SIZE_CONFIG_KEY[type])! * BYTES_PER_MB;
+  }
+
+  private assertWithinLimit(type: FileType, size: number): void {
+    const maxBytes = this.maxBytesFor(type);
+    if (size > maxBytes) {
+      throw new PayloadTooLargeException(
+        `El archivo supera el tamaño máximo permitido para ${FILE_TYPE_LABEL[type]} ` +
+          `(${Math.floor(maxBytes / BYTES_PER_MB)} MB)`,
+      );
+    }
+  }
 
   async findAllForFolder(folderId: string, userId: string): Promise<FileResponseDto[]> {
     await this.foldersService.findOneOrFail(folderId, userId);
@@ -49,12 +64,7 @@ export class FilesService {
     await this.foldersService.findOneOrFail(folderId, userId);
 
     const type = resolveFileType(dto.mimeType);
-    if (dto.size > MAX_FILE_SIZE_BYTES[type]) {
-      throw new PayloadTooLargeException(
-        `El archivo supera el tamaño máximo permitido para ${type.toLowerCase()} ` +
-        `(${Math.floor(MAX_FILE_SIZE_BYTES[type] / BYTES_PER_MB)} MB)`,
-      );
-    }
+    this.assertWithinLimit(type, dto.size);
 
     const key = `users/${userId}/folders/${folderId}/${randomUUID()}${extname(dto.originalName)}`;
     const expiresIn = this.configService.get<number>('s3.signedUrlExpiresIn') ?? 300;
@@ -72,17 +82,24 @@ export class FilesService {
     }
 
     const type = resolveFileType(dto.mimeType);
-    if (dto.size > MAX_FILE_SIZE_BYTES[type]) {
-      throw new PayloadTooLargeException(
-        `El archivo supera el tamaño máximo permitido para ${type.toLowerCase()}`,
-      );
-    }
+    this.assertWithinLimit(type, dto.size);
 
     const uploaded = await this.storageService.headObject(dto.key);
     if (!uploaded) {
       throw new NotFoundException(
         'El archivo todavía no llegó a S3; sube el binario antes de confirmar',
       );
+    }
+
+    // El `size` del DTO es lo que el cliente *dice* que subió; la URL prefirmada no impone
+    // tamaño, así que el único dato confiable es el que devuelve S3. Se valida contra el
+    // límite y se persiste ese, no el declarado. Si se pasó, el binario se borra: sin fila
+    // en la base nadie lo volvería a encontrar para limpiarlo.
+    try {
+      this.assertWithinLimit(type, uploaded.size);
+    } catch (error) {
+      await this.storageService.delete(dto.key);
+      throw error;
     }
 
     const created = await this.prisma.fileAsset.create({
@@ -92,7 +109,7 @@ export class FilesService {
         key: dto.key,
         mimeType: dto.mimeType,
         type,
-        size: dto.size,
+        size: uploaded.size,
       },
     });
 

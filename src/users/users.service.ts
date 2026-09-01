@@ -10,8 +10,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import { extname } from 'path';
-import { BYTES_PER_MB, MAX_FILE_SIZE_BYTES, } from '../files/utils/file-type.util';
+import { BYTES_PER_MB } from '../files/utils/file-type.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { ConfirmAvatarDto } from './dto/confirm-avatar.dto';
@@ -54,7 +53,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
-    @Inject(STORAGE_SERVICE) private readonly storageService: StorageService
+    @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
   ) {}
 
   findByEmail(email: string) {
@@ -101,8 +100,13 @@ export class UsersService {
     if (!AVATAR_MIME_TYPES.includes(dto.mimeType)) {
       throw new UnsupportedMediaTypeException('El avatar debe ser una imagen JPEG, PNG o WEBP');
     }
-    if (dto.size > MAX_FILE_SIZE_BYTES['IMAGE']) {
-      throw new PayloadTooLargeException('El avatar supera el tamaño máximo de 5 MB');
+    // El avatar tiene su propio tope (`UPLOAD_MAX_AVATAR_MB`), más chico que el de una imagen
+    // de biblioteca: se muestra siempre y en miniatura, no tiene sentido guardarlo pesado.
+    const maxAvatarBytes = this.configService.get<number>('uploads.maxAvatarMb')! * BYTES_PER_MB;
+    if (dto.size > maxAvatarBytes) {
+      throw new PayloadTooLargeException(
+        `El avatar supera el tamaño máximo de ${Math.floor(maxAvatarBytes / BYTES_PER_MB)} MB`,
+      );
     }
 
     const extension =
@@ -124,6 +128,17 @@ export class UsersService {
     if (!uploaded) {
       throw new NotFoundException(
         'El avatar todavía no llegó a S3; sube el binario antes de confirmar',
+      );
+    }
+
+    // La URL prefirmada no impone tamaño: el `size` del presign era una promesa del cliente.
+    // El tamaño real solo lo sabe S3, y un avatar pasado de peso se borra en vez de quedar
+    // huérfano en el bucket.
+    const maxAvatarBytes = this.configService.get<number>('uploads.maxAvatarMb')! * BYTES_PER_MB;
+    if (uploaded.size > maxAvatarBytes) {
+      await this.storageService.delete(dto.key);
+      throw new PayloadTooLargeException(
+        `El avatar supera el tamaño máximo de ${Math.floor(maxAvatarBytes / BYTES_PER_MB)} MB`,
       );
     }
 

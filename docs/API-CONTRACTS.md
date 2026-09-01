@@ -145,10 +145,10 @@ el bucket. Patrón idéntico en ambos recursos, dos pasos:
      `{ "key": "string", "uploadUrl": "string", "expiresIn": number }`.
    - Avatar: `POST /api/users/me/avatar/presign` body `{ "mimeType": "string", "size": number }`
      → misma forma de respuesta.
-   - Valida propiedad de la carpeta (biblioteca), mimeType/tamaño permitido (mismas reglas que
-     antes: `MAX_FILE_SIZE_BYTES` por tipo en biblioteca, JPEG/PNG/WEBP ≤ 5 MB en avatar) y
-     genera la `key` (mismo prefijo que siempre: `users/{userId}/folders/{folderId}/{uuid}.ext`
-     y `avatars/{userId}/{uuid}.ext`).
+   - Valida propiedad de la carpeta (biblioteca), mimeType permitido y el tamaño declarado
+     contra el tope configurado del tipo (`UPLOAD_MAX_*_MB`; en avatar además solo
+     JPEG/PNG/WEBP, con su propio `UPLOAD_MAX_AVATAR_MB`), y genera la `key` (mismo prefijo que
+     siempre: `users/{userId}/folders/{folderId}/{uuid}.ext` y `avatars/{userId}/{uuid}.ext`).
 2. **Upload** — el cliente hace `PUT <uploadUrl>` con el binario y el header
    `Content-Type` **exactamente igual** al `mimeType` declarado (la URL está firmada para ese
    content-type; si no coincide, S3 responde `403`). Este PUT va directo al bucket, sin pasar
@@ -163,6 +163,11 @@ el bucket. Patrón idéntico en ambos recursos, dos pasos:
      registro (`404` si no); también verifica que la `key` tenga el prefijo esperado del dueño
      (`403` si no) — evita que un cliente registre metadatos de un archivo que nunca subió o de
      una key ajena.
+   - **El tamaño real manda.** La URL prefirmada no impone tamaño, así que el `size` del paso 1
+     es solo una promesa del cliente: el backend vuelve a validar el `ContentLength` que
+     devuelve `HeadObject` contra el tope del tipo, **persiste ese** en `FileAsset.size` y, si
+     se pasó, borra el objeto del bucket y responde `413`. Un cliente que declare 1 byte y suba
+     500 MB no consigue nada. El `size` que el cliente envía en el confirm se ignora.
 
 **Requisito de infraestructura (fuera de este repo):** el bucket S3 debe tener una política CORS
 que permita `PUT` (y el header `Content-Type`) desde los orígenes de la web y la app; sin eso,
@@ -171,10 +176,56 @@ en el backend — se configura directamente en el bucket.
 
 ### Límites de subida
 Solo por **peso**, nunca por duración (decisión #11 de `PRODUCT.md`). Los topes viven en
-variables de entorno (`UPLOAD_MAX_IMAGE_MB`, `UPLOAD_MAX_VIDEO_MB`, `UPLOAD_MAX_TEXT_MB`,
-`UPLOAD_MAX_AVATAR_MB`), así que el cliente **no debe hardcodearlos**: si excede, la API
-responde `413` con el mensaje exacto y el límite vigente en MB
-(p. ej. `El archivo supera el tamaño máximo permitido para image (15 MB)`).
+variables de entorno (`UPLOAD_MAX_IMAGE_MB`, `UPLOAD_MAX_VIDEO_MB`, `UPLOAD_MAX_AUDIO_MB`,
+`UPLOAD_MAX_TEXT_MB`, `UPLOAD_MAX_AVATAR_MB`), así que el cliente **no debe hardcodearlos**: si
+excede, la API responde `413` con el mensaje exacto y el límite vigente en MB
+(p. ej. `El archivo supera el tamaño máximo permitido para imagen (15 MB)`).
+
+Tipos aceptados en la biblioteca (`FileType` se deriva del `mimeType`, el cliente no lo envía):
+
+| Tipo | mimeTypes | Tope por defecto |
+| --- | --- | --- |
+| `IMAGE` | `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `image/heic` | 15 MB |
+| `VIDEO` | `video/mp4`, `video/quicktime`, `video/webm`, `video/x-matroska` | 250 MB |
+| `AUDIO` | `audio/mpeg`, `audio/mp4`, `audio/aac`, `audio/wav`, `audio/x-wav`, `audio/ogg`, `audio/webm`, `audio/flac` | 50 MB |
+| `TEXT` | `text/plain`, `text/markdown`, `text/csv` | 5 MB |
+
+El avatar acepta solo `image/jpeg`, `image/png`, `image/webp` (5 MB por defecto).
+
+### Carpetas y sub-carpetas — Fase 1
+La biblioteca es un **árbol**: una carpeta puede colgar de otra (`parentId`). Se navega nivel a
+nivel, nunca trayendo el árbol entero.
+
+```
+Folder = { "id": "uuid", "name": "string", "userId": "uuid", "parentId": "uuid|null",
+           "createdAt": ISO, "updatedAt": ISO,
+           "_count": { "files": 0, "children": 0 } }
+```
+
+- `GET /api/folders` → carpetas **raíz** (`parentId: null`).
+- `GET /api/folders?parentId=<uuid>` → hijas directas de esa carpeta. `404`/`403` si la carpeta
+  no existe o no es del viewer.
+- `GET /api/folders/:id` → el `Folder` + `"path"`: el breadcrumb desde la raíz hasta ella,
+  **ella incluida**, como `[{ "id", "name" }]`. Es lo que las vistas de detalle usan para
+  dibujar la ruta y navegar hacia arriba.
+- `POST /api/folders` body `{ "name": "string", "parentId": "uuid|null (opcional)" }` → `Folder`.
+  Sin `parentId` (o `null`) crea en la raíz.
+- `PATCH /api/folders/:id` body `{ "name?": "string", "parentId?": "uuid|null" }` → `Folder`.
+  Renombra y/o mueve. **Omitir `parentId` no mueve la carpeta; `parentId: null` la manda a la
+  raíz** — son cosas distintas, no las confundas al construir el body.
+- `DELETE /api/folders/:id` → `204`. Cascada: se lleva las sub-carpetas y los archivos del
+  subárbol.
+
+Errores propios del árbol:
+
+| Caso | Código | Mensaje |
+| --- | --- | --- |
+| Nombre repetido entre hermanos | `409` | `Ya tienes una carpeta con ese nombre` (raíz) / `…una sub-carpeta con ese nombre en esta carpeta` |
+| Carpeta como su propia madre | `400` | `Una carpeta no puede ser su propia carpeta madre` |
+| Mover una carpeta dentro de su descendencia | `400` | `No puedes mover una carpeta dentro de una de sus sub-carpetas` |
+
+El nombre es único **entre hermanos**, no globalmente: `Obra` puede existir en la raíz y también
+dentro de otra carpeta.
 
 ### Likes — Fase 4
 - `POST /api/posts/:id/like` → `{ "liked": true }` (idempotente; repetir no duplica).

@@ -1,5 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
@@ -14,14 +14,21 @@ import { FoldersService } from './folders.service';
 export class FoldersController {
   constructor(private readonly foldersService: FoldersService) {}
 
+  /** Sin `parentId` devuelve la raíz de la biblioteca; con él, las hijas directas. */
   @Get()
-  findAll(@CurrentUser() user: AuthenticatedUser) {
-    return this.foldersService.findAllForUser(user.id);
+  @ApiQuery({
+    name: 'parentId',
+    required: false,
+    description: 'Carpeta madre. Omitirlo lista las carpetas raíz.',
+  })
+  findAll(@CurrentUser() user: AuthenticatedUser, @Query('parentId') parentId?: string) {
+    return this.foldersService.findAllForUser(user.id, parentId ?? null);
   }
 
+  /** Incluye `path`: el breadcrumb desde la raíz hasta esta carpeta. */
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
-    return this.foldersService.findOneOrFail(id, user.id);
+    return this.foldersService.findOneWithPath(id, user.id);
   }
 
   @Post()

@@ -48,7 +48,12 @@ describe('UsersService', () => {
       headObject: jest.fn().mockResolvedValue({ size: 1024 }),
       delete: jest.fn().mockResolvedValue(undefined),
     };
-    configService = { get: jest.fn().mockReturnValue(300) } as unknown as ConfigService;
+    // Mock por clave, no un valor único: el avatar tiene su propio tope
+    // (`uploads.maxAvatarMb`) y confundirlo con otro valor es justo el error que estas
+    // pruebas vigilan.
+    configService = {
+      get: jest.fn((key: string) => (key === 'uploads.maxAvatarMb' ? 5 : 300)),
+    } as unknown as ConfigService;
     usersService = new UsersService(prisma as unknown as PrismaService, configService, storage);
   });
 
@@ -188,6 +193,19 @@ describe('UsersService', () => {
         data: { avatarKey: 'avatars/user-1/new.png' },
       });
       expect(storage.delete).toHaveBeenCalledWith('avatars/user-1/old.png');
+    });
+
+    // La URL prefirmada no impone tamaño: el `size` del presign era una promesa del cliente.
+    // Solo el tamaño real de S3 decide, y el binario pasado de peso no puede quedar en el bucket.
+    it('rejects and deletes an object that exceeds the limit on S3', async () => {
+      storage.headObject.mockResolvedValueOnce({ size: 10 * 1024 * 1024 });
+
+      await expect(
+        usersService.updateAvatar('user-1', { key: 'avatars/user-1/big.png' }),
+      ).rejects.toBeInstanceOf(PayloadTooLargeException);
+
+      expect(storage.delete).toHaveBeenCalledWith('avatars/user-1/big.png');
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 });

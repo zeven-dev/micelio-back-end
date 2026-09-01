@@ -60,16 +60,25 @@ Carpeta/"proyecto" de un usuario para organizar su biblioteca de archivos.
 | Campo | Tipo | Notas |
 | --- | --- | --- |
 | id | uuid PK | |
-| name | string | único por (userId, name) |
+| name | string | único entre hermanos: (userId, parentId, name) |
 | userId | FK → User | cascade delete |
+| parentId | FK → Folder, nullable | `null` = carpeta raíz; cascade delete |
 
-Relaciones: `N—1 User`, `1—N FileAsset`.
+Relaciones: `N—1 User`, `N—1 Folder` (madre), `1—N Folder` (hijas), `1—N FileAsset`.
 
-Pendiente (Fase 1): `parentId` (FK autorreferente, nullable) para **sub-carpetas**; la
-unicidad de nombre pasa a ser por (userId, parentId, name).
+**Sub-carpetas (Fase 1).** `parentId` es una FK autorreferente `ON DELETE CASCADE`: borrar una
+carpeta se lleva su subárbol completo y, por la FK de `file_assets`, las filas de sus archivos.
+El árbol no tiene profundidad máxima; `FoldersService` impide los ciclos (mover una carpeta
+dentro de sí misma o de una descendiente → `400`).
+
+*Por qué la unicidad necesita dos índices:* en Postgres dos `NULL` son distintos entre sí, así
+que `@@unique([userId, parentId, name])` **no** impide dos carpetas raíz con el mismo nombre.
+La migración `20260901000000_add_subfolders_and_audio` agrega a mano el índice parcial
+`folders_userId_name_root_key` (`UNIQUE (userId, name) WHERE parentId IS NULL`) para cubrir ese
+caso. Prisma no sabe expresarlo en el schema; ahí queda anotado en un comentario del modelo.
 
 ### FileAsset (`file_assets`)
-Archivo de la **biblioteca** de un usuario (imagen, video o texto), almacenado en S3. Es la
+Archivo de la **biblioteca** de un usuario (imagen, video, audio o texto), almacenado en S3. Es la
 materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso será
 `ChatAttachment`, entidad separada por decisión de producto).
 
@@ -80,12 +89,14 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 | originalName | string | nombre original de subida |
 | key | string único | key en S3 |
 | mimeType | string | |
-| type | enum `IMAGE\|VIDEO\|TEXT` | derivado del mimeType |
-| size | int | bytes |
+| type | enum `IMAGE\|VIDEO\|AUDIO\|TEXT` | derivado del mimeType |
+| size | int | bytes — el que reporta S3 (`HeadObject`), no el que declara el cliente |
 
 ### Enum FileType
-`IMAGE | VIDEO | TEXT`. Se ampliará con `AUDIO` en la Fase 1 (biblioteca completa); el chat
-(Fase 6) decidirá si comparte el enum o define el suyo.
+`IMAGE | VIDEO | AUDIO | TEXT`. `AUDIO` entró en la Fase 1 (biblioteca completa, para obra
+sonora y para el chat); se valida **solo por peso, nunca por duración** (decisión #11 de
+`PRODUCT.md`), con `UPLOAD_MAX_AUDIO_MB` (50 MB por defecto). El chat (Fase 6) decidirá si
+comparte el enum o define el suyo.
 
 ---
 
@@ -190,3 +201,4 @@ Ver la entidad `User` y el enum `Role` en "Entidades existentes" arriba.
 | 2026-08-31 | Modelo objetivo ampliado: `isPublic` (privado por defecto), `Follow` con favoritos, ajustes de feed (layout/columnas/espaciado), likes con lista visible al dueño, `Notification` sin FKs (extraíble), fases renumeradas | Decisiones del dueño del producto (ver `PRODUCT.md`) |
 | 2026-08-31 | `tags` en Post; nueva Fase 5 con `UserAffinity` y `UserTagAffinity` (módulo `ranking`); fases posteriores renumeradas (+1) | Decisión del dueño: ranking personalizado por interacciones |
 | 2026-08-31 | Fase 0 implementada: `User` gana `cedula`, `username`, `role`, `bio`, `avatarKey`, `isPublic`; nuevo enum `Role`; migración `20260831000000_extend_user_identity_roles` | Cierre de la Fase 0 del `ROADMAP.md` |
+| 2026-09-01 | Fase 1 implementada: `Folder` gana `parentId` (sub-carpetas, unicidad por hermanos + índice parcial para la raíz); `FileType` gana `AUDIO`; migración `20260901000000_add_subfolders_and_audio` | Cierre de la Fase 1 del `ROADMAP.md` |

@@ -14,6 +14,7 @@ export const envValidationSchema = Joi.object({
 
   UPLOAD_MAX_IMAGE_MB: Joi.number().positive().default(15),
   UPLOAD_MAX_VIDEO_MB: Joi.number().positive().default(250),
+  UPLOAD_MAX_AUDIO_MB: Joi.number().positive().default(50),
   UPLOAD_MAX_TEXT_MB: Joi.number().positive().default(5),
   UPLOAD_MAX_AVATAR_MB: Joi.number().positive().default(5),
 

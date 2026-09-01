@@ -17,6 +17,7 @@ export default () => ({
   uploads: {
     maxImageMb: parseInt(process.env.UPLOAD_MAX_IMAGE_MB ?? '15', 10),
     maxVideoMb: parseInt(process.env.UPLOAD_MAX_VIDEO_MB ?? '250', 10),
+    maxAudioMb: parseInt(process.env.UPLOAD_MAX_AUDIO_MB ?? '50', 10),
     maxTextMb: parseInt(process.env.UPLOAD_MAX_TEXT_MB ?? '5', 10),
     maxAvatarMb: parseInt(process.env.UPLOAD_MAX_AVATAR_MB ?? '5', 10),
   },

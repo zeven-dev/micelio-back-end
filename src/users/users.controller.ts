@@ -14,7 +14,7 @@ import { UsersService } from './users.service';
 @Roles(...ALL_ROLES)
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) { }
+  constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
   getMe(@CurrentUser() user: AuthenticatedUser) {

@@ -44,16 +44,16 @@ la misma tarea.
   Home preparado, Carpetas migradas al perfil — es rediseño visual puro y vive enteramente en
   `micelio-front-end` y `micelio-app`; este repo no tiene tareas de diseño.)*
 
-## Fase 1 — Biblioteca completa
-- [ ] **Sub-carpetas**: `parentId` en `Folder`, validación de ciclos, unicidad
-  (userId, parentId, name). *Dónde:* `src/folders`.
-- [ ] **Audio**: `AUDIO` en `FileType` + mimeTypes. *Por qué:* chat y obra sonora.
-  **Ya decidido** (no volver a preguntar): se valida **solo por peso, nunca por duración**
-  (decisión #11 de `PRODUCT.md`). Añadir `UPLOAD_MAX_AUDIO_MB` (sugerido: 50) a
-  `configuration.ts`, `env.validation.ts` y `.env.example`, y su entrada en
-  `MAX_SIZE_CONFIG_KEY` (`src/files/utils/file-type.util.ts`) — la infraestructura de límites
-  configurables ya existe, es solo un tipo más. Recordar incluir `AUDIO` en el `Math.max` del
-  tope de Multer en `files.module.ts`.
+## Fase 1 — Biblioteca completa — **cerrada 2026-09-01**
+- [x] **Sub-carpetas**: `parentId` en `Folder`, validación de ciclos, unicidad
+  (userId, parentId, name). *Dónde:* `src/folders`. Contrato exacto (listado por nivel,
+  breadcrumb `path`, mover con `parentId: null`) en `docs/API-CONTRACTS.md`
+  ("Carpetas y sub-carpetas").
+- [x] **Audio**: `AUDIO` en `FileType` + mimeTypes, validado **solo por peso**
+  (`UPLOAD_MAX_AUDIO_MB`, 50 MB). *Por qué:* chat y obra sonora.
+- [x] **Corrección previa**: los límites de subida habían quedado hardcodeados en la Fase 0.5
+  (`MAX_FILE_SIZE_BYTES`) ignorando `UPLOAD_MAX_*_MB`; y `confirm` confiaba en el `size` que
+  declaraba el cliente. Ver `docs/STATUS.md` (2026-09-01).
 
 ## Fase 2 — Publicaciones y feed propio
 - [ ] **Módulo `posts`**: `Post` + `PostMedia` (ver `DATA-MODEL.md`), CRUD con descripción,

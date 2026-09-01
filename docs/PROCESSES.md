@@ -77,9 +77,11 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   `GET /api/users/:username`
 - **Pasos:** `GET/PATCH /me` operan sobre el propio usuario del token; el avatar sube **directo
   a S3** desde el cliente (ver "Subida directa a S3" abajo) — `presign` valida tipo/tamaño
-  (`image/jpeg|png|webp`, máx 5 MB) y devuelve una URL firmada de escritura con prefijo
-  `avatars/{userId}/`; `PATCH /me/avatar` confirma con `HeadObject`, actualiza `avatarKey` y
-  borra la key anterior si existía; `GET /:username` busca por username y aplica visibilidad:
+  (`image/jpeg|png|webp`, tope propio `UPLOAD_MAX_AVATAR_MB`, 5 MB por defecto) y devuelve una
+  URL firmada de escritura con prefijo `avatars/{userId}/`; `PATCH /me/avatar` confirma con
+  `HeadObject`, **revalida el tamaño real que reporta S3** (si se pasó, borra el objeto y
+  responde `413`), actualiza `avatarKey` y borra la key anterior si existía;
+  `GET /:username` busca por username y aplica visibilidad:
   dueño o perfil público → `UserPublic` completo (con `bio`); en cualquier otro caso,
   `UserPublic` limitado (sin `bio`, sin `feedSettings`).
 - **Notas (desviaciones documentadas, ver `STATUS.md`):** `followersCount`, `followingCount`,
@@ -97,24 +99,38 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Notas:** access token corto vivido, solo en memoria del cliente. Guard JWT global: todo
   endpoint es privado salvo `@Public()`.
 
-### CRUD de carpetas
+### CRUD de carpetas y navegación del árbol (sub-carpetas desde la Fase 1)
 - **Módulos:** `src/folders`
-- **Disparadores:** `GET/POST /api/folders`, `GET/PATCH/DELETE /api/folders/:id`
-- **Pasos:** toda operación filtra por `userId` del token (un usuario nunca ve carpetas ajenas);
-  nombre único por usuario; borrar cascadea a archivos (y sus objetos S3 vía FilesService).
-- **Notas:** pendiente Fase 1: sub-carpetas (`parentId`).
+- **Disparadores:** `GET /api/folders[?parentId=]`, `POST /api/folders`,
+  `GET/PATCH/DELETE /api/folders/:id`
+- **Pasos:** toda operación filtra por `userId` del token (un usuario nunca ve ni mueve carpetas
+  ajenas). El listado devuelve **un solo nivel**: sin `parentId`, las carpetas raíz; con él, las
+  hijas directas (validando antes que esa madre sea del viewer). `GET /:id` agrega `path`, el
+  breadcrumb desde la raíz, construido subiendo por `parentId` (`buildPath`). `POST` y `PATCH`
+  validan el nombre entre hermanos antes de escribir (→ `409`), y `PATCH` corre además
+  `assertMoveIsLegal`, que sube por los ancestros del nuevo padre para rechazar ciclos
+  (→ `400`). Borrar cascadea por FK a las sub-carpetas y a las filas `FileAsset` del subárbol.
+- **Notas:** en `PATCH`, `parentId` ausente = no mover; `parentId: null` = mover a la raíz.
+  **Hueco conocido:** la cascada borra las filas de archivos pero **no** los objetos en S3, que
+  quedan huérfanos en el bucket (ya pasaba antes de la Fase 1; con sub-carpetas afecta a un
+  subárbol entero). Arreglarlo cruza dominios y necesita decisión de arquitectura — ver
+  `src/folders/AGENTS.md` y `docs/STATUS.md`.
 
 ### Subida y gestión de archivos de biblioteca (subida directa a S3 desde Fase 0.5)
 - **Módulos:** `src/files`, `src/storage`
 - **Disparadores:** `POST /api/folders/:id/files/presign`, `POST /api/folders/:id/files/confirm`,
   `GET /api/folders/:id/files`, `DELETE /api/files/:id`
 - **Pasos:** el backend **ya no recibe binarios** (se quitó `FileInterceptor`/Multer de este
-  módulo). `presign` valida propiedad de la carpeta + mimeType/tamaño (`MAX_FILE_SIZE_BYTES` por
-  tipo) y devuelve `{ key, uploadUrl, expiresIn }` (`PutObjectCommand` firmado); el cliente hace
-  `PUT` directo a S3; `confirm` valida el prefijo de la `key` (pertenece a esa carpeta/usuario),
-  comprueba con `HeadObject` que el objeto ya llegó a S3 y recién ahí registra el `FileAsset` —
-  las lecturas devuelven URLs firmadas de descarga con expiración
-  (`AWS_S3_SIGNED_URL_EXPIRES_IN`).
+  módulo y el registro de `MulterModule` que había quedado suelto). `presign` valida propiedad de
+  la carpeta + mimeType y el tamaño declarado contra el tope configurado del tipo
+  (`UPLOAD_MAX_*_MB`, leído con `ConfigService`), y devuelve `{ key, uploadUrl, expiresIn }`
+  (`PutObjectCommand` firmado); el cliente hace `PUT` directo a S3; `confirm` valida el prefijo
+  de la `key` (pertenece a esa carpeta/usuario), comprueba con `HeadObject` que el objeto ya
+  llegó a S3, **revalida el tamaño real que reporta S3** (la URL firmada no impone tamaño: si se
+  pasó, borra el objeto y responde `413`) y recién ahí registra el `FileAsset` con ese tamaño
+  real. Las lecturas devuelven URLs firmadas de descarga con expiración
+  (`AWS_S3_SIGNED_URL_EXPIRES_IN`). Desde la Fase 1 se acepta también `AUDIO`
+  (`UPLOAD_MAX_AUDIO_MB`), validado solo por peso.
 - **Notas:** MinIO en local (docker-compose) o S3 real en producción, sin cambio de código (la
   URL firmada la genera el mismo `S3StorageService`). Estos archivos son la **biblioteca de
   publicaciones**; los adjuntos de chat serán otro flujo. El bucket necesita CORS habilitado

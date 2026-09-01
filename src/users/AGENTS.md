@@ -9,11 +9,14 @@ otro módulo).
 - `PATCH /api/users/me` — parcial `{ name?, bio?, isPublic? }`. `feedSettings` **no** se acepta
   todavía (llega en la Fase 2 con los campos de layout del feed).
 - `POST /api/users/me/avatar/presign` (JSON `{ mimeType, size }`) — valida tipo/tamaño
-  (`image/jpeg|png|webp`, máx 5 MB) y devuelve `{ key, uploadUrl, expiresIn }`; el cliente sube
+  (`image/jpeg|png|webp`, tope propio `UPLOAD_MAX_AVATAR_MB` — **no** el de las imágenes de
+  biblioteca) y devuelve `{ key, uploadUrl, expiresIn }`; el cliente sube
   el binario directo a S3 con `PUT uploadUrl`.
 - `PATCH /api/users/me/avatar` (JSON `{ key }`) — confirma con `HeadObject` que el objeto ya
-  llegó a S3, actualiza `avatarKey` y borra la key anterior. El backend **nunca** recibe el
-  binario del avatar (se quitó `FileInterceptor`/Multer de este endpoint).
+  llegó a S3, **revalida el tamaño real** que este reporta (la URL firmada no impone tamaño; si
+  se pasó del tope, borra el objeto y responde `413`), actualiza `avatarKey` y borra la key
+  anterior. El backend **nunca** recibe el binario del avatar (se quitó `FileInterceptor`/Multer
+  de este endpoint, y también el `MulterModule` que había quedado registrado en el módulo).
 - `GET /api/users/:username` — `UserPublic`; si el viewer no es el dueño y el perfil no es
   público, se omiten `bio` y `feedSettings`. **Autenticación opcional** (`@OptionalAuth()`):
   responde con o sin sesión, porque los perfiles se comparten por link (decisión #10 de

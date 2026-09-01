@@ -20,6 +20,70 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-01 — Fase 1: biblioteca completa (cierre de fase)
+- **Listo:**
+  - **Sub-carpetas.** `Folder.parentId` (FK autorreferente `ON DELETE CASCADE`), migración
+    `20260901000000_add_subfolders_and_audio`. Contrato en `docs/API-CONTRACTS.md`
+    ("Carpetas y sub-carpetas"): `GET /api/folders[?parentId=]` lista **un solo nivel** (sin
+    `parentId`, la raíz); `GET /api/folders/:id` agrega `path`, el breadcrumb desde la raíz;
+    `POST` acepta `parentId`; `PATCH` renombra y/o mueve (**`parentId` ausente = no mover;
+    `parentId: null` = mover a la raíz**). Cada carpeta trae `_count: { files, children }`.
+  - **Invariantes del árbol** en `src/folders/folders.service.ts`: nombre único **entre
+    hermanos** (→ `409`, validado en el servicio antes de escribir) y **sin ciclos**
+    (`assertMoveIsLegal` sube por los ancestros del nuevo padre → `400`). Los recorridos están
+    topeados con `MAX_TREE_DEPTH` para que un ciclo dejado por una escritura externa no cuelgue
+    el proceso.
+  - **Unicidad de las carpetas raíz.** En Postgres dos `NULL` son distintos, así que
+    `@@unique([userId, parentId, name])` no cubre la raíz: la migración crea a mano el índice
+    parcial `folders_userId_name_root_key` (`UNIQUE (userId, name) WHERE parentId IS NULL`).
+    Anotado en el schema y en `docs/DATA-MODEL.md` — es el detalle que más fácil se pierde.
+  - **Audio.** `AUDIO` en `FileType` + 8 mimeTypes en `ALLOWED_MIME_TYPES`, con
+    `UPLOAD_MAX_AUDIO_MB` (50) en los tres sitios de rigor. Validado **solo por peso, nunca por
+    duración** (decisión #11 de `PRODUCT.md`).
+  - **Correcciones de procesos rotos que venían de la Fase 0.5** (`main` estaba con `npm run
+    lint` y `npm test` en rojo, contra la regla 11 de `AGENTS.md`):
+    1. Los límites de subida estaban **hardcodeados** (`MAX_FILE_SIZE_BYTES`: imagen 15, video
+       **100**, texto 5 MB) y `UPLOAD_MAX_*_MB` no se leía en ningún lado, pese a que la doc y
+       el `.env.example` prometían lo contrario. Efecto real: un video de 150 MB se rechazaba
+       aunque `UPLOAD_MAX_VIDEO_MB=250`. Ahora `FilesService.maxBytesFor()` lee la
+       configuración vía `MAX_SIZE_CONFIG_KEY`, y la constante hardcodeada desapareció.
+    2. El **avatar** usaba el límite de las imágenes de biblioteca (15 MB) con un mensaje que
+       decía "5 MB", y `uploads.maxAvatarMb` no se usaba. Era el test que fallaba en `main`.
+       Ahora usa su propia variable y el mensaje sale del valor vigente.
+    3. `confirm` (biblioteca y avatar) confiaba en el `size` **declarado por el cliente**. La
+       URL prefirmada no impone tamaño, así que se podía declarar 1 byte y subir 500 MB. Ahora
+       se revalida el `ContentLength` real de `HeadObject`, se persiste **ese** en
+       `FileAsset.size` y, si excede, el objeto se borra del bucket y responde `413`.
+    4. Restos de Multer: `MulterModule` seguía registrado en `files.module.ts` y
+       `users.module.ts` con su `UPLOAD_CEILING_HEADROOM_BYTES`, aunque desde la Fase 0.5 ningún
+       binario pasa por la API. Eliminados.
+  - **Pruebas.** Nuevo `src/files/files.service.spec.ts` (no existía, y era justo el servicio
+    donde estaban los bugs): límites por configuración, audio, y el tamaño real de S3.
+    `folders.service.spec.ts` reescrito para el árbol (listado por nivel, breadcrumb, ciclos,
+    unicidad entre hermanos). `users.service.spec.ts`: mock de `ConfigService` **por clave** —
+    el mock plano que devolvía `300` para todo era lo que escondía el bug del avatar.
+  - **Verificación:** `npm run lint`, `npm run build` y `npm test` (5 suites, 58 tests) en
+    verde. Además smoke test end-to-end contra Postgres real: árbol de 3 niveles, listado por
+    nivel, breadcrumb correcto, `409` por nombre repetido entre hermanos, mismo nombre permitido
+    en ramas distintas, `400` en ciclo y en auto-referencia, mover a la raíz con
+    `parentId: null`, y borrado en cascada del subárbol.
+- **Falta:**
+  - **Objetos huérfanos en S3 al borrar una carpeta** (hueco que ya existía antes de esta fase,
+    pero que las sub-carpetas agrandan: un borrado se lleva un subárbol entero). La cascada de
+    la base borra las filas `FileAsset`; los binarios quedan en el bucket para siempre.
+    Arreglarlo cruza dominios —`folders` no puede consultar datos de `files` (regla 7), y
+    `files` ya importa a `folders`, así que la dependencia inversa sería circular— y por eso
+    **necesita decisión de arquitectura** antes de tocarlo: evento de dominio `folder.deleted`
+    con listener en `files`, o un barrido por prefijo en `storage`. No se improvisó.
+  - Mover/copiar **archivos** entre carpetas: no está en el `ROADMAP.md` y nadie lo pidió; hoy
+    un archivo solo se sube a la carpeta donde se creó.
+- **Necesito:** que el dueño elija cómo resolver los huérfanos de S3 (evento vs. barrido). Nada
+  más bloquea la Fase 2.
+- **Sigue:** Fase 2 del `ROADMAP.md` (módulo `posts`: `Post` + `PostMedia`, etiquetas,
+  `PATCH /api/posts/reorder`, y los campos `feedLayout/feedColumns/feedGap` en `User`). Los
+  clientes ya tienen las sub-carpetas consumidas, así que no quedan dependencias abiertas de la
+  Fase 1.
+
 ### 2026-09-01 — Fase 0.5: subida directa a S3 (cierre de fase, solo back-end)
 - **Listo:**
   - `StorageService` cambia su interfaz: se quita `upload(buffer)` (ya no tiene llamadores) y se
