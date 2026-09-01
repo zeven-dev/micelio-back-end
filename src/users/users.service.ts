@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   Logger,
@@ -11,9 +11,12 @@ import { ConfigService } from '@nestjs/config';
 import { Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
-import { BYTES_PER_MB } from '../files/utils/file-type.util';
+import { BYTES_PER_MB, MAX_FILE_SIZE_BYTES, } from '../files/utils/file-type.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
+import { ConfirmAvatarDto } from './dto/confirm-avatar.dto';
+import { PresignAvatarDto } from './dto/presign-avatar.dto';
+import { PresignAvatarResponseDto } from './dto/presign-avatar-response.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 
 const AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -50,8 +53,8 @@ export class UsersService {
 
   constructor(
     private readonly prisma: PrismaService,
-    @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
     private readonly configService: ConfigService,
+    @Inject(STORAGE_SERVICE) private readonly storageService: StorageService
   ) {}
 
   findByEmail(email: string) {
@@ -94,25 +97,40 @@ export class UsersService {
     return { ...publicView, email: updated.email, role: updated.role };
   }
 
-  async updateAvatar(userId: string, file: Express.Multer.File | undefined): Promise<MeView> {
-    if (!file) {
-      throw new BadRequestException('No se recibió ninguna imagen');
-    }
-    if (!AVATAR_MIME_TYPES.includes(file.mimetype)) {
+  async presignAvatar(userId: string, dto: PresignAvatarDto): Promise<PresignAvatarResponseDto> {
+    if (!AVATAR_MIME_TYPES.includes(dto.mimeType)) {
       throw new UnsupportedMediaTypeException('El avatar debe ser una imagen JPEG, PNG o WEBP');
     }
-    const maxAvatarMb = this.configService.get<number>('uploads.maxAvatarMb')!;
-    if (file.size > maxAvatarMb * BYTES_PER_MB) {
-      throw new PayloadTooLargeException(`El avatar supera el tamaño máximo de ${maxAvatarMb} MB`);
+    if (dto.size > MAX_FILE_SIZE_BYTES['IMAGE']) {
+      throw new PayloadTooLargeException('El avatar supera el tamaño máximo de 5 MB');
+    }
+
+    const extension =
+      dto.mimeType === 'image/png' ? '.png' : dto.mimeType === 'image/webp' ? '.webp' : '.jpg';
+    const key = `avatars/${userId}/${randomUUID()}${extension}`;
+    const expiresIn = this.configService.get<number>('s3.signedUrlExpiresIn') ?? 300;
+    const uploadUrl = await this.storageService.getSignedUploadUrl(key, dto.mimeType, expiresIn);
+
+    return { key, uploadUrl, expiresIn };
+  }
+
+  async updateAvatar(userId: string, dto: ConfirmAvatarDto): Promise<MeView> {
+    const expectedPrefix = `avatars/${userId}/`;
+    if (!dto.key.startsWith(expectedPrefix)) {
+      throw new ForbiddenException('La key subida no corresponde a este usuario');
+    }
+
+    const uploaded = await this.storageService.headObject(dto.key);
+    if (!uploaded) {
+      throw new NotFoundException(
+        'El avatar todavía no llegó a S3; sube el binario antes de confirmar',
+      );
     }
 
     const user = await this.requireById(userId);
-    const key = `avatars/${userId}/${randomUUID()}${extname(file.originalname)}`;
-    await this.storageService.upload({ key, body: file.buffer, contentType: file.mimetype });
-
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { avatarKey: key },
+      data: { avatarKey: dto.key },
     });
     // El avatar nuevo ya está guardado y referenciado: borrar el anterior es limpieza,
     // no parte del cambio. Si S3 falla aquí, se registra y se deja la key huérfana en

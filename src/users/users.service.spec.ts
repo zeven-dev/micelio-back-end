@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  ForbiddenException,
   NotFoundException,
   PayloadTooLargeException,
   UnsupportedMediaTypeException,
@@ -19,6 +19,7 @@ describe('UsersService', () => {
     };
   };
   let storage: jest.Mocked<StorageService>;
+  let configService: ConfigService;
 
   const baseUser = {
     id: 'user-1',
@@ -42,14 +43,13 @@ describe('UsersService', () => {
       },
     };
     storage = {
-      upload: jest.fn().mockResolvedValue({ key: 'avatars/user-1/new.png' }),
       getSignedDownloadUrl: jest.fn().mockResolvedValue('https://signed.example/avatar.png'),
+      getSignedUploadUrl: jest.fn().mockResolvedValue('https://signed.example/upload'),
+      headObject: jest.fn().mockResolvedValue({ size: 1024 }),
       delete: jest.fn().mockResolvedValue(undefined),
     };
-    const configService = {
-      get: jest.fn((key: string) => (key === 'uploads.maxAvatarMb' ? 5 : undefined)),
-    } as unknown as ConfigService;
-    usersService = new UsersService(prisma as unknown as PrismaService, storage, configService);
+    configService = { get: jest.fn().mockReturnValue(300) } as unknown as ConfigService;
+    usersService = new UsersService(prisma as unknown as PrismaService, configService, storage);
   });
 
   describe('getPublicProfile', () => {
@@ -133,46 +133,60 @@ describe('UsersService', () => {
     });
   });
 
-  describe('updateAvatar', () => {
-    it('throws BadRequestException when no file is provided', async () => {
-      await expect(usersService.updateAvatar('user-1', undefined)).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
-    });
-
+  describe('presignAvatar', () => {
     it('throws UnsupportedMediaTypeException for a disallowed mime type', async () => {
-      const file = { mimetype: 'application/pdf', size: 100 } as Express.Multer.File;
-      await expect(usersService.updateAvatar('user-1', file)).rejects.toBeInstanceOf(
-        UnsupportedMediaTypeException,
-      );
+      await expect(
+        usersService.presignAvatar('user-1', { mimeType: 'application/pdf', size: 100 }),
+      ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
     });
 
-    it('throws PayloadTooLargeException when the file exceeds the limit', async () => {
-      const file = {
-        mimetype: 'image/png',
-        size: 10 * 1024 * 1024,
-      } as Express.Multer.File;
-      await expect(usersService.updateAvatar('user-1', file)).rejects.toBeInstanceOf(
-        PayloadTooLargeException,
-      );
+    it('throws PayloadTooLargeException when the declared size exceeds the limit', async () => {
+      await expect(
+        usersService.presignAvatar('user-1', {
+          mimeType: 'image/png',
+          size: 10 * 1024 * 1024,
+        }),
+      ).rejects.toBeInstanceOf(PayloadTooLargeException);
     });
 
-    it('uploads the avatar and deletes the previous one', async () => {
+    it('returns a signed upload URL scoped to the user', async () => {
+      const result = await usersService.presignAvatar('user-1', {
+        mimeType: 'image/png',
+        size: 1024,
+      });
+
+      expect(result.key.startsWith('avatars/user-1/')).toBe(true);
+      expect(result.uploadUrl).toBe('https://signed.example/upload');
+    });
+  });
+
+  describe('updateAvatar', () => {
+    it('throws ForbiddenException when the key does not belong to the user', async () => {
+      await expect(
+        usersService.updateAvatar('user-1', { key: 'avatars/other-user/x.png' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('throws NotFoundException when the object never reached S3', async () => {
+      storage.headObject.mockResolvedValueOnce(null);
+      await expect(
+        usersService.updateAvatar('user-1', { key: 'avatars/user-1/new.png' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('confirms the avatar and deletes the previous one', async () => {
       prisma.user.findUnique.mockResolvedValue({
         ...baseUser,
         avatarKey: 'avatars/user-1/old.png',
       });
       prisma.user.update.mockResolvedValue({ ...baseUser, avatarKey: 'avatars/user-1/new.png' });
-      const file = {
-        mimetype: 'image/png',
-        size: 1024,
-        originalname: 'avatar.png',
-        buffer: Buffer.from('fake'),
-      } as Express.Multer.File;
 
-      await usersService.updateAvatar('user-1', file);
+      await usersService.updateAvatar('user-1', { key: 'avatars/user-1/new.png' });
 
-      expect(storage.upload).toHaveBeenCalled();
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { avatarKey: 'avatars/user-1/new.png' },
+      });
       expect(storage.delete).toHaveBeenCalledWith('avatars/user-1/old.png');
     });
   });

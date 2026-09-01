@@ -4,14 +4,16 @@
 que otros módulos leen o escriben usuarios (nunca consultar la tabla `users` con Prisma desde
 otro módulo).
 
-## Contrato actual (Fase 0)
+## Contrato actual (Fase 0; avatar rehecho a subida directa en Fase 0.5)
 - `GET /api/users/me` — `Me` completo (`UserPublic` + `email` + `role`); nunca incluye `cedula`.
 - `PATCH /api/users/me` — parcial `{ name?, bio?, isPublic? }`. `feedSettings` **no** se acepta
   todavía (llega en la Fase 2 con los campos de layout del feed).
-- `PATCH /api/users/me/avatar` (multipart, campo `avatar`) — sube a S3 vía `StorageService`
-  (prefijo `avatars/{userId}/`, solo `image/jpeg|png|webp`, máx 5 MB) y borra la key anterior.
-  El borrado es limpieza *best-effort*: si S3 falla se registra un warning y la key queda
-  huérfana, en vez de devolver `500` sobre un avatar que sí quedó guardado.
+- `POST /api/users/me/avatar/presign` (JSON `{ mimeType, size }`) — valida tipo/tamaño
+  (`image/jpeg|png|webp`, máx 5 MB) y devuelve `{ key, uploadUrl, expiresIn }`; el cliente sube
+  el binario directo a S3 con `PUT uploadUrl`.
+- `PATCH /api/users/me/avatar` (JSON `{ key }`) — confirma con `HeadObject` que el objeto ya
+  llegó a S3, actualiza `avatarKey` y borra la key anterior. El backend **nunca** recibe el
+  binario del avatar (se quitó `FileInterceptor`/Multer de este endpoint).
 - `GET /api/users/:username` — `UserPublic`; si el viewer no es el dueño y el perfil no es
   público, se omiten `bio` y `feedSettings`. **Autenticación opcional** (`@OptionalAuth()`):
   responde con o sin sesión, porque los perfiles se comparten por link (decisión #10 de

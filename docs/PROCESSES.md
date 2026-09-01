@@ -70,17 +70,18 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   (Fases 5 y 7). Este scaffold solo fija el contrato compartido para que esas fases no
   inventen formas nuevas.
 
-### Perfil de usuario (Fase 0)
+### Perfil de usuario (Fase 0; avatar rehecho a subida directa en Fase 0.5)
 - **Módulos:** `src/users`, `src/storage`
-- **Disparadores:** `GET /api/users/me`, `PATCH /api/users/me`, `PATCH /api/users/me/avatar`
-  (multipart), `GET /api/users/:username`
-- **Pasos:** `GET/PATCH /me` operan sobre el propio usuario del token; `PATCH /me/avatar` sube
-  el archivo a S3 (prefijo `avatars/{userId}/`, tipos `image/jpeg|png|webp`, máx 5 MB) vía
-  `StorageService`, actualiza `avatarKey` y borra la key anterior si existía (ese borrado es
-  limpieza *best-effort*: si S3 falla, se registra un warning y la key queda huérfana, en vez de
-  responder `500` sobre un cambio de avatar que sí se aplicó); `GET /:username`
-  busca por username y aplica visibilidad: dueño o perfil público → `UserPublic` completo (con
-  `bio`); en cualquier otro caso, `UserPublic` limitado (sin `bio`, sin `feedSettings`).
+- **Disparadores:** `GET /api/users/me`, `PATCH /api/users/me`,
+  `POST /api/users/me/avatar/presign`, `PATCH /api/users/me/avatar` (JSON `{ key }`),
+  `GET /api/users/:username`
+- **Pasos:** `GET/PATCH /me` operan sobre el propio usuario del token; el avatar sube **directo
+  a S3** desde el cliente (ver "Subida directa a S3" abajo) — `presign` valida tipo/tamaño
+  (`image/jpeg|png|webp`, máx 5 MB) y devuelve una URL firmada de escritura con prefijo
+  `avatars/{userId}/`; `PATCH /me/avatar` confirma con `HeadObject`, actualiza `avatarKey` y
+  borra la key anterior si existía; `GET /:username` busca por username y aplica visibilidad:
+  dueño o perfil público → `UserPublic` completo (con `bio`); en cualquier otro caso,
+  `UserPublic` limitado (sin `bio`, sin `feedSettings`).
 - **Notas (desviaciones documentadas, ver `STATUS.md`):** `followersCount`, `followingCount`,
   `viewerFollows`, `followsViewer` son siempre `0`/`false` hasta que exista `Follow` (Fase 3,
   no hay follow mutuo todavía); `feedSettings` se omite del todo hasta la Fase 2 (los campos
@@ -103,22 +104,22 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   nombre único por usuario; borrar cascadea a archivos (y sus objetos S3 vía FilesService).
 - **Notas:** pendiente Fase 1: sub-carpetas (`parentId`).
 
-### Subida y gestión de archivos de biblioteca
+### Subida y gestión de archivos de biblioteca (subida directa a S3 desde Fase 0.5)
 - **Módulos:** `src/files`, `src/storage`
-- **Disparadores:** `POST /api/folders/:id/files` (multipart), `GET`, `DELETE`
-- **Pasos:** Multer en memoria (nunca disco) → valida mimeType/tamaño → `StorageService.upload`
-  a S3 con key única → registra `FileAsset` → las lecturas devuelven URLs firmadas con
-  expiración (`AWS_S3_SIGNED_URL_EXPIRES_IN`).
-- **Límites de peso (configurables):** viven en `UPLOAD_MAX_*_MB` (config tipada
-  `uploads.*`), no en constantes del código: subir un tope es cambiar el `.env` y reiniciar.
-  Dos capas: el tope de Multer se arma en `MulterModule.registerAsync` (`files.module.ts` y
-  `users.module.ts`) con **1 MB de holgura** sobre el límite real, y el peso exacto por tipo lo
-  valida el servicio. Esa holgura existe para que un archivo apenas pasado del límite reciba el
-  mensaje en español con el tope vigente en vez del `File too large` genérico de Multer; algo
-  desproporcionado lo sigue cortando Multer como guarda dura de memoria.
-  **No se valida duración** de audio ni video (decisión #11 de `PRODUCT.md`).
-- **Notas:** MinIO en local (docker-compose), S3 real en producción sin cambio de código.
-  Estos archivos son la **biblioteca de publicaciones**; los adjuntos de chat serán otro flujo.
+- **Disparadores:** `POST /api/folders/:id/files/presign`, `POST /api/folders/:id/files/confirm`,
+  `GET /api/folders/:id/files`, `DELETE /api/files/:id`
+- **Pasos:** el backend **ya no recibe binarios** (se quitó `FileInterceptor`/Multer de este
+  módulo). `presign` valida propiedad de la carpeta + mimeType/tamaño (`MAX_FILE_SIZE_BYTES` por
+  tipo) y devuelve `{ key, uploadUrl, expiresIn }` (`PutObjectCommand` firmado); el cliente hace
+  `PUT` directo a S3; `confirm` valida el prefijo de la `key` (pertenece a esa carpeta/usuario),
+  comprueba con `HeadObject` que el objeto ya llegó a S3 y recién ahí registra el `FileAsset` —
+  las lecturas devuelven URLs firmadas de descarga con expiración
+  (`AWS_S3_SIGNED_URL_EXPIRES_IN`).
+- **Notas:** MinIO en local (docker-compose) o S3 real en producción, sin cambio de código (la
+  URL firmada la genera el mismo `S3StorageService`). Estos archivos son la **biblioteca de
+  publicaciones**; los adjuntos de chat serán otro flujo. El bucket necesita CORS habilitado
+  para `PUT` desde los orígenes de los clientes (infra, fuera de este repo) — ver
+  `docs/API-CONTRACTS.md`.
 
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`

@@ -27,6 +27,12 @@ export const MAX_SIZE_CONFIG_KEY: Record<FileType, string> = {
   TEXT: 'uploads.maxTextMb',
 };
 
+export const MAX_FILE_SIZE_BYTES: Record<FileType, number> = {
+  IMAGE: 15 * BYTES_PER_MB,
+  VIDEO: 100 * BYTES_PER_MB,
+  TEXT: 5 * BYTES_PER_MB,
+}
+
 export function resolveFileType(mimeType: string): FileType {
   for (const [type, mimeTypes] of Object.entries(ALLOWED_MIME_TYPES)) {
     if (mimeTypes.includes(mimeType)) {

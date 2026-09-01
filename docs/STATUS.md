@@ -20,96 +20,44 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
-### 2026-08-31 — Decisiones del dueño y cierre de puntos abiertos (tarea)
-
-El dueño del producto resolvió los puntos que quedaban de la Fase 0. Se implementó **solo lo que
-pertenece a la Fase 0**; lo de fases posteriores quedó documentado, por instrucción explícita.
-
-- **Decisiones tomadas** (ya en `PRODUCT.md` como #10, #11 y #12):
-  1. **Perfil público navegable sin sesión.** `GET /api/users/:username` se comparte por link.
-  2. **Archivos: solo por peso, nunca por duración**, y los topes en variables de entorno.
-     Se descartó validar duración porque exigiría ffprobe o un parser de medios en el servidor.
-  3. **Comentarios anidados desde el inicio** (`parentId` en `Comment`), decidido antes de
-     crear la entidad para no pagar la migración después.
-  4. **Formato de `username` confirmado** como `^[a-z0-9_.]{3,30}$` (sin cambios).
-- **Listo (implementado):**
-  - **Autenticación opcional.** Decorador `@OptionalAuth()`
-    (`src/common/decorators/optional-auth.decorator.ts`) + soporte en
-    `JwtAuthGuard.handleRequest` y en `RolesGuard`. Sin cabecera `Authorization` la petición
-    pasa como anónima; **con** cabecera, un token inválido o expirado sigue dando `401` para que
-    el cliente refresque en vez de degradar en silencio a la vista de anónimo. Es la única ruta
-    no `@Public()` que responde sin sesión. Contrato exacto (tabla de casos) en
-    `API-CONTRACTS.md`.
-  - **Todos los pesos máximos son configurables:** `UPLOAD_MAX_IMAGE_MB`, `UPLOAD_MAX_VIDEO_MB`,
-    `UPLOAD_MAX_TEXT_MB`, `UPLOAD_MAX_AVATAR_MB` en `configuration.ts`, `env.validation.ts` y
-    `.env.example`. Se eliminaron las constantes de `file-type.util.ts`, `files.controller.ts`,
-    `users.controller.ts` y `users.service.ts`. El tope de Multer se arma en
-    `MulterModule.registerAsync` con **1 MB de holgura** sobre el límite real: así el usuario
-    recibe el mensaje en español con el tope vigente en vez del `File too large` de Multer, que
-    era lo que pasaba antes (el tope del decorador era igual al del servicio, así que la
-    validación del servicio era código muerto).
-- **Verificación:** `lint`, `build` y `test` (**36 tests**, antes 30) en verde. Smoke test
-  end-to-end contra Postgres real con `UPLOAD_MAX_AVATAR_MB=7` (distinto del default 5) para
-  comprobar que la variable manda: perfil público visible sin token; privado oculta `bio` sin
-  token, a un tercero con token, y la muestra al dueño; token inválido → `401`; username
-  inexistente → `404`; `users/me`, `folders`, `admin` siguen dando `401` sin sesión; avatar de
-  7.5 MB → `413 El avatar supera el tamaño máximo de 7 MB`; imagen de 16 MB → `413 ... para
-  image (15 MB)`; 20 MB → cortado por Multer.
-- **Falta:** integrar la rama (sigue sin PR, por decisión del dueño). Los clientes aún no tienen
-  vista de perfil ajeno: la ruta pública existe en la API pero nadie la consume todavía (Fase 3).
-- **Necesito:** dos preguntas siguen abiertas y no bloquean nada aún — chats grupales o 1 a 1
-  (Fase 6) y alcance de admin/soporte (Fase 11). Confirmar además el supuesto de **un solo nivel
-  de anidación** en comentarios, que elegí al escribir el contrato (el dueño pidió "anidados",
-  sin precisar profundidad).
-- **Sigue:** Fase 1 del `ROADMAP.md`. La tarea de `AUDIO` ya lleva anotado qué tocar: el tipo,
-  `UPLOAD_MAX_AUDIO_MB` y el `Math.max` del tope de Multer; sin validación de duración.
-
-### 2026-08-31 — Revisión de la Fase 0: cierre de huecos (tarea)
-
-Repaso de la Fase 0 ya cerrada, verificando el código contra lo que afirmaba esta bitácora. Las
-13 casillas de las tres hojas de ruta estaban efectivamente implementadas y las puertas de
-calidad pasaban. Se encontraron y corrigieron seis huecos reales:
-
+### 2026-09-01 — Fase 0.5: subida directa a S3 (cierre de fase, solo back-end)
 - **Listo:**
-  1. **Migración aplicable sobre datos existentes.** `20260831000000_extend_user_identity_roles`
-     agregaba `cedula`/`username` como `NOT NULL` sin relleno: fallaba con *"column contains
-     null values"* en cualquier base que ya tuviera usuarios (reproducido contra Postgres real).
-     Ahora agrega las columnas nullable, rellena las filas previas de forma determinista a
-     partir del `id` y solo entonces aplica `SET NOT NULL` + índices únicos. Verificado:
-     migra bien sobre base vacía **y** sobre base con usuarios, y
-     `prisma migrate diff` contra `schema.prisma` reporta "No difference detected".
-     Valores de relleno y sus consecuencias en `docs/DATA-MODEL.md`.
-     *Nota:* se editó una migración ya aplicada (excepción a la regla 5). Fue deliberado: una
-     migración que **falla** no se puede reparar con otra posterior, y no hay despliegue. Quien
-     tenga una base local con esta migración aplicada debe correr `prisma migrate reset`.
-  2. **`RolesGuard` ahora es fail-closed.** Antes permitía el acceso cuando la ruta no declaraba
-     `@Roles`, así que la regla 8 ("todo endpoint declara sus roles") dependía de la memoria del
-     agente — y los endpoints nuevos de la propia Fase 0 no la cumplían. Ahora una ruta que no
-     sea `@Public()` y no declare `@Roles(...)` responde `500` nombrando controlador y handler.
-     `users`, `folders`, `files` y `auth/logout` declaran `@Roles(...ALL_ROLES)`.
-  3. **Registro concurrente devuelve `409`, no `500`.** Las tres pre-consultas de unicidad son
-     TOCTOU; ahora el `P2002` de Prisma se traduce al mismo `409` por campo
-     (`AuthService.createUserOrConflict`), con specs para los tres índices.
-  4. **`GET /api/auth/me` eliminado.** Quedó con la forma anterior a la Fase 0 (sin `username`
-     ni `role`) y ningún cliente lo consumía; `GET /api/users/me` es el contrato. Registrado en
-     "Procesos eliminados" de `docs/PROCESSES.md`.
-  5. **`GET /health` eliminado.** Se registraba después de `app.listen()` y nunca respondió
-     (`404`, verificado). El health real es `GET /api/health` en `AppController`.
-  6. **Borrado del avatar anterior ahora es best-effort.** Un fallo de S3 al limpiar la key
-     vieja devolvía `500` sobre un cambio de avatar que sí se había aplicado.
-- **Verificación:** `npm run lint`, `npm run build` y `npm test` (**30 tests**, antes 24) en
-  verde. Además smoke test end-to-end con la API corriendo contra Postgres real: las 17 rutas
-  responden lo esperado con el guard fail-closed (ninguna quedó bloqueada), registro duplicado
-  da `409` con el mensaje del campo, perfil privado oculta `bio` a terceros y la muestra al
-  dueño, `cedula` y `passwordHash` nunca salen, un no-ADMIN recibe `403` y un ADMIN promueve a
-  TEACHER correctamente.
-- **Falta:** **integrar los clientes.** El back-end está en `main`, pero `micelio-front-end` y
-  `micelio-app` tienen su Fase 0 solo en rama. Hoy, `main` contra `main`, el registro está roto:
-  la API exige `cedula`/`username` y las pantallas de login de `main` no los envían.
-- **Necesito:** decisión del dueño sobre (a) integrar las ramas de los dos clientes a `main`, y
-  (b) las 6 ambigüedades de la entrada siguiente, que siguen sin revisar.
-- **Sigue:** Fase 1 del `ROADMAP.md` (`src/folders`: `parentId` para sub-carpetas; `AUDIO` en
-  `FileType`). No se empezó por decisión explícita: esta tarea era solo el repaso de la Fase 0.
+  - `StorageService` cambia su interfaz: se quita `upload(buffer)` (ya no tiene llamadores) y se
+    agregan `getSignedUploadUrl(key, contentType, expiresInSeconds?)` (URL firmada de escritura,
+    `PutObjectCommand`) y `headObject(key)` (`HeadObjectCommand`, `null` si el objeto no existe
+    todavía) — `src/storage/storage.service.ts`, `src/storage/s3-storage.service.ts`.
+  - `src/files`: `POST /api/folders/:id/files` (multipart) se reemplaza por
+    `POST .../files/presign` (valida carpeta + mimeType/tamaño, devuelve
+    `{ key, uploadUrl, expiresIn }`) y `POST .../files/confirm` (valida prefijo de `key` +
+    `HeadObject`, crea el `FileAsset`). Se quitó `FileInterceptor`/Multer del controlador; el
+    backend ya no recibe binarios de biblioteca. DTOs nuevos en `src/files/dto/`
+    (`presign-file.dto.ts`, `confirm-file.dto.ts`, `presign-response.dto.ts`).
+  - `src/users`: mismo patrón para el avatar. `POST /api/users/me/avatar/presign` (JSON
+    `{ mimeType, size }`) + `PATCH /api/users/me/avatar` ahora JSON `{ key }` (antes multipart).
+    DTOs nuevos en `src/users/dto/` (`presign-avatar.dto.ts`, `confirm-avatar.dto.ts`,
+    `presign-avatar-response.dto.ts`).
+  - `docs/API-CONTRACTS.md`, `docs/PROCESSES.md`, `src/storage/AGENTS.md`,
+    `src/files/AGENTS.md`, `src/users/AGENTS.md` actualizados con el contrato de dos pasos
+    (presign → `PUT` directo del cliente a S3 → confirm) y la nota de infraestructura: el
+    bucket necesita su propia política **CORS** que permita `PUT` con `Content-Type` desde los
+    orígenes de la web y la app — no es algo configurable desde este repo.
+  - `src/users/users.service.spec.ts` reescrito para el nuevo flujo (`presignAvatar`,
+    `updateAvatar` con `ForbiddenException`/`NotFoundException`); `npm run lint`, `npm run
+    build` y `npm test` (4 suites, 26 tests) en verde.
+- **Falta:** nada de la parte de back-end de esta fase. El resto de la Fase 0.5 (quitar sidebar,
+  navegación tipo Instagram, perfil rediseñado, Home preparado, Carpetas migradas al perfil) es
+  rediseño visual puro y no toca este repo — ver `docs/ROADMAP.md`.
+- **Necesito:**
+  - **CORS del bucket S3**, fuera de este repo: sin esa política, el `PUT` directo del navegador
+    falla aunque el backend esté perfecto. No hay bandera de entorno para esto — se configura en
+    AWS directamente.
+  - No hay `.env` real en este sandbox (solo `.env.example`, con credenciales de MinIO); el
+    dueño confirmó que las variables de AWS reales ya están seteadas en el entorno de destino.
+    No se pudo hacer una verificación end-to-end contra S3/MinIO real en esta tarea —
+    verificado por lectura de código, tipos, lint, build y tests unitarios únicamente.
+- **Sigue:** cuando la web y la app integren el nuevo flujo (presign → PUT directo → confirm),
+  probar con un bucket real o MinIO local (`docker compose up -d`) antes de dar por cerrado el
+  camino feliz de subida.
 
 ### 2026-08-31 — Fase 0: identidad, roles y arquitectura (cierre de fase)
 - **Listo:**
