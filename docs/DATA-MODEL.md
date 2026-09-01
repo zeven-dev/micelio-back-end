@@ -27,9 +27,12 @@ Cuenta de la aplicación e identidad social (Fase 0: registro con cédula/userna
 | bio | string? | editable vía `PATCH /api/users/me` |
 | avatarKey | string? | key en S3; se sube vía `PATCH /api/users/me/avatar` (multipart) |
 | isPublic | boolean @default(`false`) | perfiles privados por defecto |
+| feedLayout | enum `FeedLayout` @default(`GRID`) | Fase 2 — ver "Ajustes de feed en User" |
+| feedColumns | int @default(`3`) | Fase 2 — 1–6 |
+| feedGap | int @default(`2`) | Fase 2 — índice 0–5 de la escala de espaciado |
 | createdAt / updatedAt | datetime | |
 
-Relaciones: `1—N Folder`.
+Relaciones: `1—N Folder`, `1—N Post`.
 
 Migración: `20260831000000_extend_user_identity_roles`.
 
@@ -98,6 +101,65 @@ sonora y para el chat); se valida **solo por peso, nunca por duración** (decisi
 `PRODUCT.md`), con `UPLOAD_MAX_AUDIO_MB` (50 MB por defecto). El chat (Fase 6) decidirá si
 comparte el enum o define el suyo.
 
+### Post (`posts`)
+Publicación del feed propio de un usuario: descripción, etiquetas y 1..N medios tomados de su
+biblioteca. Fase 2.
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| id | uuid PK | |
+| authorId | FK → User | cascade delete |
+| description | string? | máx 2200 caracteres (validación del DTO) |
+| tags | string[] | normalizadas por el servidor, máx 10 — reglas exactas en `API-CONTRACTS.md`; índice **GIN** para la búsqueda (Fase 9) y la afinidad por temas (Fase 5) |
+| position | int | orden en el feed del autor: `0` es la primera. La publicación nueva entra en `0` y las demás suben un puesto |
+| createdAt / updatedAt | datetime | |
+
+Relaciones: `N—1 User`, `1—N PostMedia`. Índice `(authorId, position)`: el feed propio siempre
+se lee por autor y en su orden curado.
+
+*Por qué `tags` como arreglo y no tabla:* no hay metadatos por etiqueta; Postgres + GIN cubren
+búsqueda y conteo sin joins.
+
+*Por qué `position` deja huecos al borrar:* renumerar todo el feed en cada borrado es escritura
+masiva para nada — lo que importa es el orden relativo, y el siguiente `PATCH /api/posts/reorder`
+renumera de todos modos.
+
+### PostMedia (`post_media`)
+Une una publicación con archivos de la biblioteca (**no** se duplica el binario).
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| id | uuid PK | |
+| postId | FK → Post | cascade delete |
+| fileAssetId | FK → FileAsset | **`onDelete: Restrict`** (ver abajo) |
+| order | int | posición en el carrusel; es el índice del arreglo que manda el cliente |
+| width / height | int? | píxeles **declarados por el cliente** al publicar; nulos en audio/texto |
+
+Único `(postId, fileAssetId)`: un archivo no se repite dentro de la misma publicación.
+
+**Decisión pendiente de la Fase 2, ya tomada: borrar un `FileAsset` usado por un `Post` se
+bloquea.** La FK es `Restrict`, así que `DELETE /api/files/:id` responde `409` y `DELETE
+/api/folders/:id` también si algún archivo del subárbol está publicado (la cascada se detiene y
+Postgres aborta el borrado). *Por qué bloquear y no cascadear:* una publicación sin medio es una
+publicación rota, y el usuario tiene la acción alternativa a mano (borrar la publicación).
+*Por qué no "marcar":* obligaría a inventar un estado de medio ausente que ningún contrato
+define.
+
+**Por qué `width`/`height` viven aquí y no en `FileAsset`:** el binario nunca pasa por el
+backend (subida directa a S3), así que el servidor no puede medir la imagen; el único que
+conoce las dimensiones es el cliente que la publica. Ponerlas en `FileAsset` obligaría además a
+cambiar la forma de respuesta de `files`, que los dos clientes ya consumen. Ver `STATUS.md`
+(2026-09-01, Fase 2) — es una ambigüedad que el contrato no resolvía.
+
+### Ajustes de feed en User (Fase 2)
+`feedLayout` (enum `FeedLayout`: `GRID | MASONRY`, default `GRID`), `feedColumns` (int,
+default 3, validado 1–6) y `feedGap` (int, default 2, validado 0–5 — **índice** de la escala de
+espaciado del design system, no píxeles). Viven **en `User`** y no en una tabla 1–1 porque
+siempre se leen junto al perfil (`UserPublic.feedSettings`) y jamás por separado: una tabla
+aparte serían un join y una fila extra por usuario a cambio de nada.
+
+Migración: `20260901120000_add_posts_and_feed_settings`.
+
 ---
 
 ## Modelo objetivo (planificado)
@@ -108,21 +170,8 @@ comparte el enum o define el suyo.
 ### Fase 0 — Identidad y roles — **implementado**
 Ver la entidad `User` y el enum `Role` en "Entidades existentes" arriba.
 
-### Fase 2 — Publicaciones y feed propio
-- **Post**: `id, authorId → User, description, tags String[] (máx 10, normalizadas por el
-  servidor — reglas exactas en `API-CONTRACTS.md`; índice GIN para búsqueda y afinidad),
-  position (orden en el feed del autor), createdAt/updatedAt`. Una publicación agrupa 1..N
-  medios. *Por qué tags como arreglo y no tabla:* no hay metadatos por etiqueta; Postgres +
-  GIN cubren búsqueda y conteo sin joins.
-- **PostMedia**: `id, postId → Post, fileAssetId → FileAsset, order`. Une publicación con
-  archivos de biblioteca (no se duplica el binario). Borrar un FileAsset usado por un Post debe
-  bloquearse o marcarse (decisión al implementar; documentarla aquí).
-- **Ajustes de presentación del feed** (en User o tabla 1–1 `FeedSettings`, decidir al
-  implementar y documentar): `feedLayout (enum GRID | MASONRY)`, `feedColumns Int` (1–6),
-  `feedGap Int` (índice 0–5 en la escala de espaciado del design system; ver
-  `API-CONTRACTS.md`). *Por qué:* el dueño elige cuadrícula o
-  masonry, cuántas columnas y el espaciado entre publicaciones; los visitantes ven el feed como
-  el dueño lo curó.
+### Fase 2 — Publicaciones y feed propio — **implementado**
+Ver `Post`, `PostMedia` y los ajustes de feed en "Entidades existentes" arriba.
 
 ### Fase 3 — Grafo social y privacidad
 - **Follow**: `id, followerId → User, followedId → User, isFavorite Boolean @default(false),
@@ -202,3 +251,4 @@ Ver la entidad `User` y el enum `Role` en "Entidades existentes" arriba.
 | 2026-08-31 | `tags` en Post; nueva Fase 5 con `UserAffinity` y `UserTagAffinity` (módulo `ranking`); fases posteriores renumeradas (+1) | Decisión del dueño: ranking personalizado por interacciones |
 | 2026-08-31 | Fase 0 implementada: `User` gana `cedula`, `username`, `role`, `bio`, `avatarKey`, `isPublic`; nuevo enum `Role`; migración `20260831000000_extend_user_identity_roles` | Cierre de la Fase 0 del `ROADMAP.md` |
 | 2026-09-01 | Fase 1 implementada: `Folder` gana `parentId` (sub-carpetas, unicidad por hermanos + índice parcial para la raíz); `FileType` gana `AUDIO`; migración `20260901000000_add_subfolders_and_audio` | Cierre de la Fase 1 del `ROADMAP.md` |
+| 2026-09-01 | Fase 2 implementada: `Post` (tags con índice GIN, `position`), `PostMedia` (`Restrict` sobre `FileAsset`, `width`/`height` declarados por el cliente) y ajustes de feed en `User` (`feedLayout`/`feedColumns`/`feedGap`); migración `20260901120000_add_posts_and_feed_settings` | Cierre de la Fase 2 del `ROADMAP.md` |

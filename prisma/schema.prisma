@@ -21,6 +21,12 @@ enum Role {
   SUPPORT
 }
 
+/// Presentación del feed propio: cuadrícula de celdas 1:1 o masonry por relación de aspecto.
+enum FeedLayout {
+  GRID
+  MASONRY
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -35,7 +41,14 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // Ajustes de presentación del feed propio (Fase 2). Viven en `User` y no en una tabla 1–1
+  // porque siempre se leen junto al perfil (`UserPublic.feedSettings`) y nunca por separado.
+  feedLayout  FeedLayout @default(GRID)
+  feedColumns Int        @default(3)
+  feedGap     Int        @default(2)
+
   folders Folder[]
+  posts   Post[]
 
   @@map("users")
 }
@@ -73,8 +86,49 @@ model FileAsset {
   size         Int
   createdAt    DateTime @default(now())
 
-  folder Folder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folder Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  posts  PostMedia[]
 
   @@index([folderId])
   @@map("file_assets")
+}
+
+model Post {
+  id          String   @id @default(uuid())
+  authorId    String
+  description String?
+  tags        String[]
+  position    Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  author User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media  PostMedia[]
+
+  // El feed propio se lee siempre por autor y en el orden que él curó (`position` asc).
+  @@index([authorId, position])
+  // Búsqueda por etiquetas (Fase 9) y afinidad por temas (Fase 5) sobre el arreglo `tags`.
+  @@index([tags(ops: ArrayOps)], type: Gin)
+  @@map("posts")
+}
+
+model PostMedia {
+  id          String @id @default(uuid())
+  postId      String
+  fileAssetId String
+  order       Int
+  // Dimensiones declaradas por el cliente al publicar: el binario nunca pasa por el backend,
+  // así que nadie más las conoce. Nulas para audio/texto (no tienen relación de aspecto).
+  width       Int?
+  height      Int?
+
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  // `Restrict`: un archivo usado en una publicación no se puede borrar (ni por borrado de
+  // carpeta) — la publicación se quedaría sin medio. Ver docs/DATA-MODEL.md.
+  fileAsset FileAsset @relation(fields: [fileAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([postId, fileAssetId])
+  @@index([postId, order])
+  @@index([fileAssetId])
+  @@map("post_media")
 }
