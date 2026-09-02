@@ -11,6 +11,7 @@ import { envValidationSchema } from './config/env.validation';
 import { FilesModule } from './files/files.module';
 import { FoldersModule } from './folders/folders.module';
 import { PostsModule } from './posts/posts.module';
+import { SocialModule } from './social/social.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StorageModule } from './storage/storage.module';
 import { UsersModule } from './users/users.module';
@@ -31,6 +32,7 @@ import { UsersModule } from './users/users.module';
     FoldersModule,
     FilesModule,
     PostsModule,
+    SocialModule,
     AdminModule,
   ],
   controllers: [AppController],
