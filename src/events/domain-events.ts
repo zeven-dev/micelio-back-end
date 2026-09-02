@@ -15,6 +15,7 @@ export const DOMAIN_EVENTS = {
   COMMENT_CREATED: 'comment.created',
   MESSAGE_SENT: 'message.sent',
   USER_FOLLOWED: 'user.followed',
+  FOLDER_DELETED: 'folder.deleted',
 } as const;
 
 export type DomainEventName = (typeof DOMAIN_EVENTS)[keyof typeof DOMAIN_EVENTS];
@@ -78,4 +79,15 @@ export interface MessageSentEvent {
 export interface UserFollowedEvent {
   followerId: string;
   followedId: string;
+}
+
+/**
+ * Una carpeta y todo su subárbol se borraron de la base. Lo consume `files` para limpiar los
+ * binarios que quedaron en S3 (las filas ya se fueron por cascada, así que el payload lleva los
+ * ids del subárbol completo: sin ellos nadie podría reconstruir qué borrar).
+ */
+export interface FolderDeletedEvent {
+  userId: string;
+  /** La carpeta borrada y todas sus descendientes, incluida ella misma. */
+  folderIds: string[];
 }

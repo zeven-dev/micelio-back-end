@@ -4,12 +4,14 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FoldersService } from './folders.service';
 
 describe('FoldersService', () => {
   let foldersService: FoldersService;
+  let events: { emit: jest.Mock };
   let prisma: {
     folder: {
       findMany: jest.Mock;
@@ -26,7 +28,7 @@ describe('FoldersService', () => {
   beforeEach(() => {
     prisma = {
       folder: {
-        findMany: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
         findUnique: jest.fn(),
         create: jest.fn(),
@@ -34,7 +36,11 @@ describe('FoldersService', () => {
         delete: jest.fn(),
       },
     };
-    foldersService = new FoldersService(prisma as unknown as PrismaService);
+    events = { emit: jest.fn() };
+    foldersService = new FoldersService(
+      prisma as unknown as PrismaService,
+      events as unknown as EventEmitter2,
+    );
   });
 
   describe('findAllForUser', () => {
@@ -230,6 +236,35 @@ describe('FoldersService', () => {
       await foldersService.remove('root', 'user-1');
 
       expect(prisma.folder.delete).toHaveBeenCalledWith({ where: { id: 'root' } });
+    });
+
+    // El evento es lo que permite a `files` limpiar S3: sin los ids del subárbol, recogidos
+    // ANTES del borrado, nadie podría saber qué prefijos barrer.
+    it('emits folder.deleted with the whole subtree, collected before deleting', async () => {
+      prisma.folder.findUnique.mockResolvedValue(root);
+      prisma.folder.findMany
+        .mockResolvedValueOnce([{ id: 'child' }])
+        .mockResolvedValueOnce([{ id: 'grandchild' }])
+        .mockResolvedValueOnce([]);
+
+      await foldersService.remove('root', 'user-1');
+
+      expect(events.emit).toHaveBeenCalledWith('folder.deleted', {
+        userId: 'user-1',
+        folderIds: ['root', 'child', 'grandchild'],
+      });
+    });
+
+    it('does not emit when the delete was blocked', async () => {
+      prisma.folder.findUnique.mockResolvedValue(root);
+      prisma.folder.delete.mockRejectedValueOnce(
+        new Prisma.PrismaClientKnownRequestError('FK', { code: 'P2003', clientVersion: '5' }),
+      );
+
+      await expect(foldersService.remove('root', 'user-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(events.emit).not.toHaveBeenCalled();
     });
   });
 });

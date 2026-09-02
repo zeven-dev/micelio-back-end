@@ -8,7 +8,10 @@ Estos archivos son la **biblioteca de publicaciones** del usuario.
   `{ key, uploadUrl, expiresIn }`. El cliente hace `PUT uploadUrl` directo a S3 (fuera de este
   backend).
 - `POST /api/folders/:id/files/confirm` — valida prefijo de `key` + `HeadObject` (el objeto debe
-  existir ya en S3) y recién ahí crea el `FileAsset`.
+  existir ya en S3) y recién ahí crea el `FileAsset`. Acepta además `width`/`height`
+  **opcionales** en píxeles: el cliente los mide (el servidor no puede, el binario no pasa por
+  aquí) y las publicaciones los heredan para el masonry. Si faltan quedan `null` y ese medio se
+  dibuja cuadrado — un fallo midiendo nunca impide subir.
 - `GET /api/folders/:id/files`, `DELETE /api/files/:id` sin cambios de forma. Desde la Fase 2,
   `DELETE` responde **`409`** si el archivo está en una publicación (ver abajo).
 - Detalle completo de los dos pasos en `docs/API-CONTRACTS.md` ("Subida directa a S3").
@@ -41,8 +44,14 @@ paso: sin fila en la base, nadie volvería a encontrarlo para limpiarlo.
   `docs/DATA-MODEL.md` (bloquear, no cascadear ni marcar).
 - **Servicios públicos para otros dominios (regla 7):** `findOwnedByUser(ids, userId)` (valida
   propiedad vía `FoldersService`; `404`/`403`) y `findManyByIds(ids)` (sin control de propiedad,
-  para contenido ajeno ya autorizado por quien llama). Los usa `posts` para armar sus medios;
-  nadie más consulta `file_assets` con Prisma.
+  para contenido ajeno ya autorizado por quien llama). Ambos devuelven también `width`/`height`.
+  Los usa `posts` para armar sus medios; nadie más consulta `file_assets` con Prisma.
+- **Limpieza de S3 (`files-cleanup.listener.ts`):** escucha `folder.deleted` y borra **por
+  prefijo** los binarios del subárbol borrado. Va por evento porque `folders` no puede consultar
+  `file_assets` y `files` ya lo importa (la dependencia inversa sería circular); y por prefijo
+  porque cuando el listener corre las filas ya no existen. El esquema de keys vive en
+  `utils/library-key.util.ts` — este módulo las genera, así que es el único que las interpreta.
+  Un fallo de S3 se registra y no se propaga: la carpeta ya se borró.
 - Tipos nuevos → actualizar `FileType` (schema + migración), `ALLOWED_MIME_TYPES`,
   `MAX_SIZE_CONFIG_KEY` y `FILE_TYPE_LABEL` en `utils/file-type.util.ts`, la variable
   `UPLOAD_MAX_<TIPO>_MB` en los tres sitios que exige `src/config/AGENTS.md`, y

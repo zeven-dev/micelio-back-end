@@ -33,13 +33,14 @@ sub-carpetas").
   sano nunca lo alcanza, pero un ciclo dejado por una escritura fuera de este servicio no puede
   colgar el proceso.
 
+## Evento `folder.deleted`
+Un borrado exitoso emite `folder.deleted` (`{ userId, folderIds }`) con **todo el subárbol**,
+recogido con `collectSubtreeIds` **antes** de borrar: después, la cascada ya no deja rastro de
+qué carpetas existían. Lo consume `files` para limpiar los binarios de S3 (ver su `AGENTS.md` y
+`docs/PROCESSES.md`). Si el borrado se bloquea con `409`, no se emite nada. Este módulo **no**
+sabe qué hace el consumidor ni toca S3.
+
 ## Pendiente
-- **Objetos huérfanos en S3 al borrar una carpeta**: la cascada borra las filas `FileAsset`, no
-  los binarios del bucket. Con sub-carpetas el hueco es mayor (un borrado se lleva un subárbol
-  entero). Arreglarlo cruza dominios (`folders` no puede consultar datos de `files`, y
-  `files` ya importa a `folders`), así que necesita una decisión de arquitectura: evento de
-  dominio `folder.deleted` con un listener en `files`, o barrido por prefijo en `storage`.
-  Ver `docs/STATUS.md`.
 - Carpetas de grupo/curso vivirán en el módulo futuro `groups`, NO aquí — este módulo es solo
   biblioteca personal.
 

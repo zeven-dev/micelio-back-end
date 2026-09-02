@@ -6,15 +6,20 @@ lógica**. Ver `docs/ARCHITECTURE.md` ("Eventos de dominio como columna vertebra
 ## Piezas
 - `domain-events.ts` — `DOMAIN_EVENTS` (nombres: `post.created`, `post.liked`, `post.unliked`,
   `post.saved`, `post.unsaved`, `post.shared`, `comment.created`, `message.sent`,
-  `user.followed`) y una interfaz de payload por evento.
+  `user.followed`, `folder.deleted`) y una interfaz de payload por evento.
 - `EventEmitterModule.forRoot()` se registra en `src/app.module.ts` (global); este módulo no
   tiene un `.module.ts` propio porque no expone providers, solo tipos.
 
 ## Estado (Fase 2)
-- **Productores:** `posts` emite `post.created` (`{ postId, authorId, tags }`) al publicar.
-- **Consumidores:** ninguno todavía. `ranking` (Fase 5) y `notifications` (Fase 7) son los que
-  van a escuchar; hasta entonces el evento se emite y nadie lo atiende, que es exactamente lo
-  que esta arquitectura busca (el productor no sabe quién escucha).
+- **Productores:** `posts` emite `post.created` (`{ postId, authorId, tags }`) al publicar y
+  `folders` emite `folder.deleted` (`{ userId, folderIds }`) al borrar una carpeta.
+- **Consumidores:** `files` escucha `folder.deleted` para limpiar los binarios huérfanos de S3
+  (primer consumidor real del proyecto). `post.created` todavía no lo escucha nadie: `ranking`
+  (Fase 5) y `notifications` (Fase 7) son los que van a hacerlo, y que hoy no exista consumidor
+  es exactamente lo que esta arquitectura busca (el productor no sabe quién escucha).
+- `folder.deleted` no venía en la lista de `ARCHITECTURE.md`: se agregó el 2026-09-02, con
+  acuerdo del dueño, porque era la forma de que `files` limpiara S3 sin que `folders` conociera
+  sus tablas (la llamada directa habría sido circular).
 - El resto de los eventos siguen siendo scaffold: sus productores llegan con `social`/`chat`
   (Fases 3, 4 y 6).
 

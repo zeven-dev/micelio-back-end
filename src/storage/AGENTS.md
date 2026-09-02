@@ -1,11 +1,18 @@
 # Módulo `storage`
 
 **Responsabilidad:** abstracción de almacenamiento de objetos. Interfaz `StorageService`
-(`getSignedDownloadUrl`, `getSignedUploadUrl`, `headObject`, `delete`) con implementación S3
+(`getSignedDownloadUrl`, `getSignedUploadUrl`, `headObject`, `delete`, `deleteByPrefix`) con
+implementación S3
 (`s3-storage.service.ts`). **Desde la Fase 0.5 no existe subida server-side**: los binarios
 suben directo del cliente a S3 con la URL de `getSignedUploadUrl` (`PutObjectCommand` firmado);
 el backend solo entrega esa URL y confirma con `headObject` que el objeto ya llegó antes de
 persistir cualquier metadato. Por eso ya no hay método `upload(buffer)` en la interfaz.
+
+`deleteByPrefix(prefix)` (2026-09-02) borra todo lo que cuelga de un prefijo, listando y
+borrando por páginas de 1000 (`ListObjectsV2` + `DeleteObjects`), y devuelve cuántos objetos
+borró. La usa `files` al limpiar una carpeta borrada: sus filas ya no existen, así que el
+prefijo es el único rastro de esos binarios. **Este módulo no sabe qué significa un prefijo** —
+quién lo arma es el dominio dueño de esas keys.
 
 ## Reglas del módulo
 - Ningún otro módulo habla con el SDK de AWS directamente: siempre a través de

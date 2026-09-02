@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { FoldersModule } from '../folders/folders.module';
 import { StorageModule } from '../storage/storage.module';
+import { FilesCleanupListener } from './files-cleanup.listener';
 import { FilesController } from './files.controller';
 import { FilesService } from './files.service';
 
@@ -10,7 +11,7 @@ import { FilesService } from './files.service';
 @Module({
   imports: [FoldersModule, StorageModule],
   controllers: [FilesController],
-  providers: [FilesService],
+  providers: [FilesService, FilesCleanupListener],
   // `posts` (Fase 2) arma sus medios con `findOwnedByUser`/`findManyByIds` en vez de consultar
   // `file_assets` por su cuenta: el cruce de dominios va por el servicio público (regla 7).
   exports: [FilesService],

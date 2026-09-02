@@ -5,8 +5,10 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Folder } from '@prisma/client';
 import { isForeignKeyViolation } from '../common/utils/prisma-errors.util';
+import { DOMAIN_EVENTS, FolderDeletedEvent } from '../events/domain-events';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateFolderDto } from './dto/create-folder.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
@@ -26,7 +28,10 @@ export interface FolderPathItem {
 
 @Injectable()
 export class FoldersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   /**
    * Carpetas hijas directas de `parentId` (raíz si es `null`). La biblioteca se navega nivel a
@@ -100,6 +105,10 @@ export class FoldersService {
 
   async remove(id: string, userId: string) {
     await this.findOneOrFail(id, userId);
+    // Los ids del subárbol se recogen **antes** de borrar: después, la cascada ya no deja rastro
+    // de qué carpetas existían, y el listener de `files` los necesita para limpiar S3.
+    const folderIds = await this.collectSubtreeIds(id);
+
     // La FK autorreferente es ON DELETE CASCADE: borrar una carpeta se lleva sus sub-carpetas
     // y, por la FK de `file_assets`, las filas de sus archivos. Esa cascada se detiene si algún
     // archivo del subárbol está en una publicación (`post_media` referencia con `Restrict`):
@@ -114,6 +123,31 @@ export class FoldersService {
       }
       throw error;
     }
+
+    // Solo tras un borrado exitoso: el evento significa "esto ya no existe en la base".
+    this.eventEmitter.emit(DOMAIN_EVENTS.FOLDER_DELETED, {
+      userId,
+      folderIds,
+    } satisfies FolderDeletedEvent);
+  }
+
+  /**
+   * La carpeta y todas sus descendientes, por niveles. Topeado con `MAX_TREE_DEPTH` como el
+   * resto de recorridos: un ciclo dejado por una escritura externa no puede colgar el proceso.
+   */
+  private async collectSubtreeIds(rootId: string): Promise<string[]> {
+    const all = [rootId];
+    let level = [rootId];
+
+    for (let depth = 0; depth < MAX_TREE_DEPTH && level.length > 0; depth += 1) {
+      const children = await this.prisma.folder.findMany({
+        where: { parentId: { in: level } },
+        select: { id: true },
+      });
+      level = children.map((child) => child.id).filter((childId) => !all.includes(childId));
+      all.push(...level);
+    }
+    return all;
   }
 
   private async buildPath(folder: Folder): Promise<FolderPathItem[]> {

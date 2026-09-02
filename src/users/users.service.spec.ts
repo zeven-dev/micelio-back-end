@@ -52,6 +52,7 @@ describe('UsersService', () => {
       getSignedUploadUrl: jest.fn().mockResolvedValue('https://signed.example/upload'),
       headObject: jest.fn().mockResolvedValue({ size: 1024 }),
       delete: jest.fn().mockResolvedValue(undefined),
+      deleteByPrefix: jest.fn().mockResolvedValue(0),
     };
     // Mock por clave, no un valor único: el avatar tiene su propio tope
     // (`uploads.maxAvatarMb`) y confundirlo con otro valor es justo el error que estas
