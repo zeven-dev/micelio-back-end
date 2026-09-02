@@ -22,6 +22,7 @@ sincronizadas.
 | [`docs/PROCESSES.md`](docs/PROCESSES.md) | Registro de procesos: qué hacen, dónde viven, por qué existen | **Siempre** que se cree, modifique o elimine un proceso/flujo |
 | [`docs/API-CONTRACTS.md`](docs/API-CONTRACTS.md) | Formas exactas de peticiones/respuestas y algoritmo del feed | **Siempre** que se cree o cambie un contrato de endpoint |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Lista de tareas por fases: qué hacer, cómo, por qué y dónde | Al completar o replantear una tarea |
+| [`docs/ORCHESTRATION.md`](docs/ORCHESTRATION.md) | Protocolo jefe+hijos entre los tres repos: orden de fase, verificación, cuándo pausar | Solo con acuerdo del dueño del producto |
 | `src/<módulo>/AGENTS.md` | Contrato y lineamientos del módulo | Al terminar cualquier tarea que toque el módulo |
 
 ## Reglas para agentes (obligatorias, sin excepción)

@@ -20,6 +20,21 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-02 — Protocolo de orquestación jefe+hijos (tarea, proceso entre repos)
+- **Listo:** `docs/ORCHESTRATION.md` — protocolo para ejecutar una fase en los tres repos con
+  supervisión mínima del dueño: back-end siempre primero (contrato cerrado y exportado antes de
+  que front/app empiecen), un gate mecánico que el jefe verifica corriendo los comandos de
+  calidad él mismo (nunca confía en el reporte de un hijo), delegación a subagentes con alcance
+  explícito y prohibición de inventar forma de contrato ante ambigüedad, tabla de qué modelo usar
+  según el rol, y una lista cerrada de los únicos tres casos donde el jefe debe pausar y
+  preguntar en vez de ejecutar. Enlazado desde el `AGENTS.md` de los tres repos.
+- **Falta:** unificar los tokens de `DESIGN-SYSTEM.md` de front-end y app en un archivo fuente
+  único verificable por diff (hoy siguen siendo prosa duplicada) — queda anotado en el propio
+  `ORCHESTRATION.md` como pendiente, no se hizo en esta tarea.
+- **Necesito:** que el dueño del producto revise el protocolo una vez, ya que cambios futuros a
+  este documento requieren su acuerdo explícito (misma regla que `ARCHITECTURE.md`).
+- **Sigue:** usar este protocolo para ejecutar la Fase 4 (`Interacciones`) en los tres repos.
+
 ### 2026-09-02 — Contrato exportable a OpenAPI (tarea, preparación Fase 4)
 - **Listo:** `docs/API-CONTRACTS.md` sigue siendo la fuente de reglas de negocio y algoritmos,
   pero las formas exactas de petición/respuesta ahora también se exportan como OpenAPI real:
