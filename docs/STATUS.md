@@ -20,6 +20,31 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-02 — Contrato exportable a OpenAPI (tarea, preparación Fase 4)
+- **Listo:** `docs/API-CONTRACTS.md` sigue siendo la fuente de reglas de negocio y algoritmos,
+  pero las formas exactas de petición/respuesta ahora también se exportan como OpenAPI real:
+  `UserPublicView`/`MeView`/`FeedSettingsView` (antes `interface`, ahora clases decoradas en
+  `src/users/users.service.ts`), DTOs de respuesta de `posts`, `files`, `social` y `auth`
+  completados con `@ApiProperty`/`@ApiPropertyOptional`, decorador reutilizable
+  `ApiCursorPaginatedResponse` para listas paginadas (`src/common/dto/cursor-pagination.dto.ts`),
+  y las rutas de los 8 controladores con `@ApiOkResponse`/`@ApiCreatedResponse` donde existe un
+  DTO real. Nuevo `npm run api:export` (`scripts/export-openapi.ts`) → `docs/openapi.json`
+  (committeado; se regenera con ese comando, no se edita a mano). `micelio-front-end` y
+  `micelio-app` generan sus tipos desde ese archivo (`npm run sync:api`) en vez de retipar a mano
+  leyendo la prosa de `API-CONTRACTS.md`.
+- **Falta:** 3 rutas sueltas y el módulo `folders` completo no tienen DTO de respuesta, así que
+  quedan fuera del OpenAPI exportado: `GET /api/health`, `PATCH /api/admin/users/:id/role`,
+  `POST /api/auth/logout`, y las 5 rutas de `src/folders/folders.controller.ts` (el servicio
+  devuelve el `Folder` de Prisma más extensiones ad-hoc `_count`/`path`, sin DTO). No se inventó
+  un DTO para no fijar una forma que nadie decidió.
+- **Necesito:** que el dueño del producto decida la forma exacta de respuesta de `folders` (hoy
+  expone el modelo de Prisma tal cual) para poder darle DTO y sumarlo al contrato exportado;
+  igual para las 3 rutas sueltas (formas simples, bajo riesgo, pero deben decidirse antes de
+  tiparlas para no tener que romperlas después).
+- **Sigue:** Fase 4 del `ROADMAP.md` (`Interacciones`: likes, guardados, comentarios) — todo
+  endpoint nuevo debe llevar sus DTOs de respuesta decorados desde el inicio, no como backfill
+  posterior.
+
 ### 2026-09-02 — Fase 3: grafo social, privacidad y home feed (cierre de fase, back-end)
 - **Listo:**
   - **Módulo `social`** (`src/social/`, con su `AGENTS.md`): `POST/DELETE/PATCH

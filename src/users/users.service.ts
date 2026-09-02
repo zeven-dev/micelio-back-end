@@ -9,6 +9,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FeedLayout, Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { BYTES_PER_MB } from '../files/utils/file-type.util';
@@ -30,28 +31,57 @@ export interface CreateUserData {
   cedula: string;
 }
 
-export interface FeedSettingsView {
+export class FeedSettingsView {
+  @ApiProperty({ enum: FeedLayout })
   layout: FeedLayout;
+
+  @ApiProperty()
   columns: number;
+
+  @ApiProperty()
   gap: number;
 }
 
-export interface UserPublicView {
+export class UserPublicView {
+  @ApiProperty()
   id: string;
+
+  @ApiProperty()
   username: string;
+
+  @ApiProperty()
   name: string;
+
+  @ApiProperty({ nullable: true, type: String })
   avatarUrl: string | null;
+
+  @ApiProperty()
   isPublic: boolean;
+
+  @ApiProperty()
   followersCount: number;
+
+  @ApiProperty()
   followingCount: number;
+
+  @ApiProperty()
   viewerFollows: boolean;
+
+  @ApiProperty()
   followsViewer: boolean;
+
+  @ApiPropertyOptional({ nullable: true, type: String })
   bio?: string | null;
+
+  @ApiPropertyOptional({ type: () => FeedSettingsView })
   feedSettings?: FeedSettingsView;
 }
 
-export interface MeView extends UserPublicView {
+export class MeView extends UserPublicView {
+  @ApiProperty()
   email: string;
+
+  @ApiProperty({ enum: Role })
   role: Role;
 }
 

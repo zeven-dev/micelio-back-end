@@ -6,6 +6,14 @@ una razón fuerte para desviarse, se actualiza aquí en la misma tarea y se anot
 `PROCESSES.md`. Los endpoints ya existentes (auth, folders, files) conservan su forma actual;
 esto especifica lo nuevo.
 
+**Relación con `docs/openapi.json`:** las formas de petición/respuesta descritas aquí también se
+generan como OpenAPI real vía `npm run api:export` (decoradores Swagger en los DTOs), y de ahí
+`micelio-front-end`/`micelio-app` generan sus tipos TypeScript (`npm run sync:api`) — ver
+"Exportación del contrato" en `PROCESSES.md`. Este documento sigue mandando para lo que OpenAPI
+no puede expresar: reglas de negocio, el algoritmo del feed, pesos de afinidad, decisiones de
+ambigüedad. Si cambias una forma aquí, el DTO decorado correspondiente debe cambiar en el mismo
+commit — de lo contrario el contrato exportado queda desincronizado de esta prosa.
+
 ## Convenciones generales (obligatorias)
 
 - **Envelope de éxito** (lo aplica `TransformInterceptor`, no lo construyas a mano):

@@ -12,6 +12,24 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 
 ## Procesos activos
 
+### Exportación del contrato (OpenAPI)
+- **Módulos:** todos los que exponen un controlador; el propio `SwaggerModule` (bootstrapeado en
+  `src/main.ts`) y `scripts/export-openapi.ts`.
+- **Disparador:** `npm run api:export`, manual — se corre al cerrar cualquier tarea que cambie un
+  contrato (DTO de respuesta nuevo/modificado, ruta nueva).
+- **Pasos:** el script bootea `AppModule` sin `listen()`, construye el mismo `DocumentBuilder` que
+  `main.ts` (debe mantenerse idéntico a mano — no hay un solo lugar de config todavía), genera el
+  documento con `SwaggerModule.createDocument` y lo escribe en `docs/openapi.json`.
+- **Notas:** `docs/openapi.json` se committea (no está en `.gitignore`): es el artefacto que
+  `micelio-front-end` y `micelio-app` leen con su propio `npm run sync:api` para generar tipos
+  TypeScript (`openapi-typescript`), en vez de retipar a mano contra la prosa de
+  `docs/API-CONTRACTS.md`. Un endpoint sin DTO de respuesta decorado con `@ApiProperty` **no**
+  aparece bien formado en el export — por eso `docs/API-CONTRACTS.md` sigue siendo la fuente para
+  reglas de negocio y algoritmos, pero las *formas* de petición/respuesta deben mantenerse en
+  sincronía con los decoradores Swagger, no solo con la prosa. Endpoints sin DTO de respuesta hoy
+  (ver `STATUS.md` — `folders`, `/health`, `/auth/logout`, `/admin/users/:id/role`): quedan fuera
+  del export hasta que se les dé DTO.
+
 ### Registro de usuario
 - **Módulos:** `src/auth`, `src/users`
 - **Disparador:** `POST /api/auth/register` (público)

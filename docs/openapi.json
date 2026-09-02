@@ -1,0 +1,1991 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "AppController_health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/users/me": {
+      "get": {
+        "operationId": "UsersController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "UsersController_updateMe",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/me/avatar/presign": {
+      "post": {
+        "operationId": "UsersController_presignAvatar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignAvatarDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignAvatarResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/me/avatar": {
+      "patch": {
+        "operationId": "UsersController_updateAvatar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmAvatarDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/{username}": {
+      "get": {
+        "operationId": "UsersController_getByUsername",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPublicView"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/{username}/follow": {
+      "post": {
+        "operationId": "SocialController_follow",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowStateDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "SocialController_unfollow",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowStateDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "SocialController_setFavorite",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFollowDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FollowStateDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/me/following": {
+      "get": {
+        "operationId": "SocialController_following",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/FollowingItemDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/me/followers": {
+      "get": {
+        "operationId": "SocialController_followers",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/FollowerItemDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/folders": {
+      "get": {
+        "operationId": "FoldersController_findAll",
+        "parameters": [
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Carpeta madre. Omitirlo lista las carpetas raíz.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "FoldersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{id}": {
+      "get": {
+        "operationId": "FoldersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "FoldersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "FoldersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files": {
+      "get": {
+        "operationId": "FilesController_findAll",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files/presign": {
+      "post": {
+        "operationId": "FilesController_presign",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files/confirm": {
+      "post": {
+        "operationId": "FilesController_confirm",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/files/{id}": {
+      "delete": {
+        "operationId": "FilesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/feed": {
+      "get": {
+        "operationId": "PostsController_feed",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PostResponseDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/posts": {
+      "post": {
+        "operationId": "PostsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/posts/reorder": {
+      "patch": {
+        "operationId": "PostsController_reorder",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReorderPostsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReorderResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/posts/{id}": {
+      "get": {
+        "operationId": "PostsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "PostsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePostDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "PostsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/{username}/posts": {
+      "get": {
+        "operationId": "PostsController_findByUsername",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PostResponseDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/admin/users/{id}/role": {
+      "patch": {
+        "operationId": "AdminController_updateRole",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRoleDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "Micelio API",
+    "description": "Auth, folders and file storage API for Micelio",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      },
+      "cookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "refresh_token"
+      }
+    },
+    "schemas": {
+      "FeedSettingsView": {
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "string",
+            "enum": [
+              "GRID",
+              "MASONRY"
+            ]
+          },
+          "columns": {
+            "type": "number"
+          },
+          "gap": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "layout",
+          "columns",
+          "gap"
+        ]
+      },
+      "MeView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPublic": {
+            "type": "boolean"
+          },
+          "followersCount": {
+            "type": "number"
+          },
+          "followingCount": {
+            "type": "number"
+          },
+          "viewerFollows": {
+            "type": "boolean"
+          },
+          "followsViewer": {
+            "type": "boolean"
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "feedSettings": {
+            "$ref": "#/components/schemas/FeedSettingsView"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "TEACHER",
+              "ADMIN",
+              "SUPPORT"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "name",
+          "avatarUrl",
+          "isPublic",
+          "followersCount",
+          "followingCount",
+          "viewerFollows",
+          "followsViewer",
+          "email",
+          "role"
+        ]
+      },
+      "FeedSettingsDto": {
+        "type": "object",
+        "properties": {
+          "layout": {
+            "type": "string",
+            "enum": [
+              "GRID",
+              "MASONRY"
+            ],
+            "example": "MASONRY"
+          },
+          "columns": {
+            "type": "number",
+            "example": 3,
+            "minimum": 1,
+            "maximum": 6
+          },
+          "gap": {
+            "type": "number",
+            "example": 2,
+            "minimum": 0,
+            "maximum": 5
+          }
+        }
+      },
+      "UpdateMeDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Ada Lovelace"
+          },
+          "bio": {
+            "type": "string",
+            "example": "Ilustradora y animadora."
+          },
+          "isPublic": {
+            "type": "boolean",
+            "example": true
+          },
+          "feedSettings": {
+            "$ref": "#/components/schemas/FeedSettingsDto"
+          }
+        }
+      },
+      "PresignAvatarDto": {
+        "type": "object",
+        "properties": {
+          "mimeType": {
+            "type": "string",
+            "example": "image/png"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          }
+        },
+        "required": [
+          "mimeType",
+          "size"
+        ]
+      },
+      "PresignAvatarResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string",
+            "description": "URL firmada para un PUT directo del binario a S3."
+          },
+          "expiresIn": {
+            "type": "number",
+            "description": "Segundos de validez de uploadUrl."
+          }
+        },
+        "required": [
+          "key",
+          "uploadUrl",
+          "expiresIn"
+        ]
+      },
+      "ConfirmAvatarDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "avatars/uuid/uuid.png"
+          }
+        },
+        "required": [
+          "key"
+        ]
+      },
+      "UserPublicView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "isPublic": {
+            "type": "boolean"
+          },
+          "followersCount": {
+            "type": "number"
+          },
+          "followingCount": {
+            "type": "number"
+          },
+          "viewerFollows": {
+            "type": "boolean"
+          },
+          "followsViewer": {
+            "type": "boolean"
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          },
+          "feedSettings": {
+            "$ref": "#/components/schemas/FeedSettingsView"
+          }
+        },
+        "required": [
+          "id",
+          "username",
+          "name",
+          "avatarUrl",
+          "isPublic",
+          "followersCount",
+          "followingCount",
+          "viewerFollows",
+          "followsViewer"
+        ]
+      },
+      "FollowStateDto": {
+        "type": "object",
+        "properties": {
+          "following": {
+            "type": "boolean"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "following"
+        ]
+      },
+      "UpdateFollowDto": {
+        "type": "object",
+        "properties": {
+          "isFavorite": {
+            "type": "boolean",
+            "example": true,
+            "description": "Favorito: prioridad de 12 h en el home."
+          }
+        },
+        "required": [
+          "isFavorite"
+        ]
+      },
+      "FollowingItemDto": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserPublicView"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "isFavorite",
+          "since"
+        ]
+      },
+      "FollowerItemDto": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserPublicView"
+          },
+          "since": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "since"
+        ]
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure-Password!"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ada Lovelace"
+          },
+          "username": {
+            "type": "string",
+            "example": "ada.lovelace"
+          },
+          "cedula": {
+            "type": "string",
+            "example": "1020304050",
+            "description": "Cédula colombiana (solo dígitos)"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name",
+          "username",
+          "cedula"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ]
+      },
+      "AuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponseDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "user"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure-Password!"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "CreateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Vacaciones 2026"
+          },
+          "parentId": {
+            "type": "object",
+            "description": "Carpeta madre. Ausente o null = carpeta raíz.",
+            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Vacaciones 2026"
+          },
+          "parentId": {
+            "type": "object",
+            "description": "Nueva carpeta madre. `null` mueve la carpeta a la raíz; omitirlo no la mueve.",
+            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "nullable": true
+          }
+        }
+      },
+      "FileResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "folderId": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO",
+              "AUDIO",
+              "TEXT"
+            ]
+          },
+          "size": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          },
+          "url": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "folderId",
+          "originalName",
+          "mimeType",
+          "type",
+          "size",
+          "width",
+          "height",
+          "url",
+          "createdAt"
+        ]
+      },
+      "PresignFileDto": {
+        "type": "object",
+        "properties": {
+          "originalName": {
+            "type": "string",
+            "example": "boceto.png"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/png"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          }
+        },
+        "required": [
+          "originalName",
+          "mimeType",
+          "size"
+        ]
+      },
+      "PresignResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string",
+            "description": "URL firmada para un PUT directo del binario a S3."
+          },
+          "expiresIn": {
+            "type": "number",
+            "description": "Segundos de validez de uploadUrl."
+          }
+        },
+        "required": [
+          "key",
+          "uploadUrl",
+          "expiresIn"
+        ]
+      },
+      "ConfirmFileDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "users/uuid/folders/uuid/uuid.png"
+          },
+          "originalName": {
+            "type": "string",
+            "example": "boceto.png"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/png"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          },
+          "width": {
+            "type": "number",
+            "description": "Ancho en píxeles, medido por el cliente. El binario nunca pasa por el backend, así que nadie más puede conocerlo. Opcional: sin él, el medio se dibuja cuadrado en el masonry.",
+            "example": 1080
+          },
+          "height": {
+            "type": "number",
+            "description": "Alto en píxeles (ver `width`).",
+            "example": 1350
+          }
+        },
+        "required": [
+          "key",
+          "originalName",
+          "mimeType",
+          "size"
+        ]
+      },
+      "PostMediaResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "order": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO",
+              "AUDIO",
+              "TEXT"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "order",
+          "type",
+          "url",
+          "expiresAt",
+          "width",
+          "height"
+        ]
+      },
+      "PostResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/UserPublicView"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "position": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaResponseDto"
+            }
+          },
+          "viewerHasLiked": {
+            "type": "boolean"
+          },
+          "viewerHasSaved": {
+            "type": "boolean"
+          },
+          "likeCount": {
+            "type": "number"
+          },
+          "commentCount": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "author",
+          "description",
+          "tags",
+          "position",
+          "createdAt",
+          "media",
+          "viewerHasLiked",
+          "viewerHasSaved",
+          "commentCount"
+        ]
+      },
+      "PostMediaInputDto": {
+        "type": "object",
+        "properties": {
+          "fileAssetId": {
+            "type": "string",
+            "description": "Archivo de la biblioteca del autor."
+          },
+          "width": {
+            "type": "number",
+            "description": "Ancho en píxeles, medido por el cliente al publicar. El binario nunca pasa por el backend, así que nadie más lo conoce. Sin sentido para audio/texto.",
+            "example": 1080
+          },
+          "height": {
+            "type": "number",
+            "description": "Alto en píxeles (ver `width`).",
+            "example": 1350
+          }
+        },
+        "required": [
+          "fileAssetId"
+        ]
+      },
+      "CreatePostDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "example": "Bocetos del mural #proceso"
+          },
+          "tags": {
+            "description": "Etiquetas explícitas. El servidor las normaliza y les suma los #hashtags de la descripción; si tras normalizar quedan más de 10, responde 400.",
+            "example": [
+              "ilustración",
+              "proceso"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "media": {
+            "description": "Medios en el orden del carrusel.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaInputDto"
+            }
+          }
+        },
+        "required": [
+          "media"
+        ]
+      },
+      "ReorderPostsDto": {
+        "type": "object",
+        "properties": {
+          "orderedIds": {
+            "description": "Todos los posts del usuario, en el orden deseado.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "orderedIds"
+        ]
+      },
+      "ReorderResponseDto": {
+        "type": "object",
+        "properties": {
+          "reordered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reordered"
+        ]
+      },
+      "UpdatePostDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "object",
+            "example": "Versión final del mural #proceso"
+          },
+          "tags": {
+            "example": [
+              "mural",
+              "proceso"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaInputDto"
+            }
+          }
+        }
+      },
+      "UpdateUserRoleDto": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "TEACHER",
+              "ADMIN",
+              "SUPPORT"
+            ],
+            "example": "TEACHER"
+          }
+        },
+        "required": [
+          "role"
+        ]
+      }
+    }
+  }
+}

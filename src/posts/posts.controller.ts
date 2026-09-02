@@ -10,12 +10,16 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
-import { CursorPaginationDto } from '../common/dto/cursor-pagination.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  ApiCursorPaginatedResponse,
+  CursorPaginationDto,
+} from '../common/dto/cursor-pagination.dto';
 import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { CreatePostDto } from './dto/create-post.dto';
+import { PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
@@ -32,27 +36,32 @@ export class PostsController {
    * con `nextCursor` y **deduplica por `id`** al concatenar páginas.
    */
   @Get('feed')
+  @ApiCursorPaginatedResponse(PostResponseDto)
   feed(@CurrentUser() user: AuthenticatedUser, @Query() query: CursorPaginationDto) {
     return this.postsService.getHomeFeed(user.id, query);
   }
 
   @Post('posts')
+  @ApiCreatedResponse({ type: PostResponseDto })
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePostDto) {
     return this.postsService.create(user.id, dto);
   }
 
   /** Antes que `:id`: si no, Nest interpretaría "reorder" como un id de publicación. */
   @Patch('posts/reorder')
+  @ApiOkResponse({ type: ReorderResponseDto })
   reorder(@CurrentUser() user: AuthenticatedUser, @Body() dto: ReorderPostsDto) {
     return this.postsService.reorder(user.id, dto);
   }
 
   @Get('posts/:id')
+  @ApiOkResponse({ type: PostResponseDto })
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.postsService.findOne(id, user.id);
   }
 
   @Patch('posts/:id')
+  @ApiOkResponse({ type: PostResponseDto })
   update(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -72,6 +81,7 @@ export class PostsController {
    * porque es el contenido de ese perfil, pero lo sirve este módulo: `users` no sabe de posts.
    */
   @Get('users/:username/posts')
+  @ApiCursorPaginatedResponse(PostResponseDto)
   findByUsername(
     @Param('username') username: string,
     @CurrentUser() user: AuthenticatedUser,

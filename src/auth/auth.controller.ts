@@ -1,10 +1,11 @@
 import { Body, Controller, Headers, Post, Res, UseGuards } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { AuthService } from './auth.service';
+import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtRefreshAuthGuard } from './guards/jwt-refresh-auth.guard';
@@ -21,6 +22,7 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @ApiCreatedResponse({ type: AuthResponseDto })
   @Post('register')
   async register(
     @Body() dto: RegisterDto,
@@ -33,6 +35,7 @@ export class AuthController {
   }
 
   @Public()
+  @ApiCreatedResponse({ type: AuthResponseDto })
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -46,6 +49,7 @@ export class AuthController {
 
   @Public()
   @UseGuards(JwtRefreshAuthGuard)
+  @ApiCreatedResponse({ type: AuthResponseDto })
   @Post('refresh')
   async refresh(
     @CurrentUser() user: AuthenticatedUser,

@@ -62,7 +62,11 @@ sincronizadas.
    `npm run build` y `npm test` deben pasar antes de cualquier push.
 12. **Consistencia con los clientes.** Cambios de contrato (rutas, formas de respuesta) se
     documentan en Swagger (decoradores) y se anotan en `docs/PROCESSES.md`, porque hay dos
-    clientes (web y app) consumiendo la misma API.
+    clientes (web y app) consumiendo la misma API. Todo DTO de respuesta nuevo lleva
+    `@ApiProperty`/`@ApiPropertyOptional` completos — no basta con que compile, tiene que
+    aparecer bien formado en `npm run api:export` (`docs/openapi.json`), porque de ahí generan
+    sus tipos `micelio-front-end` y `micelio-app` (`npm run sync:api`). Corre `api:export` antes
+    de cerrar cualquier tarea que toque un contrato.
 
 ## Stack
 
@@ -106,4 +110,5 @@ docker compose up -d        # Postgres + MinIO locales
 npm run prisma:migrate      # migraciones
 npm run start:dev           # API en http://localhost:3000/api
 npm run lint && npm run build && npm test
+npm run api:export          # regenera docs/openapi.json (fuente de tipos para web y app)
 ```

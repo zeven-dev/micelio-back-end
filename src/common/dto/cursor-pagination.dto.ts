@@ -1,4 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { applyDecorators, Type } from '@nestjs/common';
+import { ApiExtraModels, ApiOkResponse, ApiPropertyOptional, getSchemaPath } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 /** Página por defecto y tope de la paginación por cursor (`docs/API-CONTRACTS.md`). */
@@ -24,4 +25,23 @@ export class CursorPaginationDto {
 export interface CursorPage<T> {
   items: T[];
   nextCursor: string | null;
+}
+
+/** Documenta en Swagger un endpoint que devuelve `CursorPage<T>` (genérico, no anotable directo). */
+export function ApiCursorPaginatedResponse<TModel extends Type<unknown>>(model: TModel) {
+  return applyDecorators(
+    ApiExtraModels(model),
+    ApiOkResponse({
+      schema: {
+        allOf: [
+          {
+            properties: {
+              items: { type: 'array', items: { $ref: getSchemaPath(model) } },
+              nextCursor: { type: 'string', nullable: true },
+            },
+          },
+        ],
+      },
+    }),
+  );
 }
