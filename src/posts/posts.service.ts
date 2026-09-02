@@ -306,8 +306,10 @@ export class PostsService {
       type: asset.type,
       url,
       expiresAt: new Date(Date.now() + expiresIn * 1000),
-      width: media.width,
-      height: media.height,
+      // Las dimensiones son del archivo de biblioteca; lo que el cliente mande al publicar
+      // manda por encima (útil si alguna vez recorta un medio al publicarlo).
+      width: media.width ?? asset.width,
+      height: media.height ?? asset.height,
     };
   }
 }

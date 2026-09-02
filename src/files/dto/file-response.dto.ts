@@ -7,6 +7,9 @@ export class FileResponseDto {
   mimeType: string;
   type: FileType;
   size: number;
+  /** Dimensiones declaradas al subir; nulas en audio, texto y archivos anteriores a la Fase 2. */
+  width: number | null;
+  height: number | null;
   url: string;
   createdAt: Date;
 }

@@ -24,6 +24,7 @@ import {
   MAX_SIZE_CONFIG_KEY,
   resolveFileType,
 } from './utils/file-type.util';
+import { libraryFolderPrefix } from './utils/library-key.util';
 
 /**
  * Lo mínimo que otro módulo necesita de un archivo de biblioteca para construir su propia
@@ -34,6 +35,9 @@ export interface LibraryAssetRef {
   id: string;
   type: FileType;
   key: string;
+  /** Dimensiones del archivo; las publicaciones las heredan para el masonry. */
+  width: number | null;
+  height: number | null;
 }
 
 @Injectable()
@@ -79,7 +83,7 @@ export class FilesService {
     const type = resolveFileType(dto.mimeType);
     this.assertWithinLimit(type, dto.size);
 
-    const key = `users/${userId}/folders/${folderId}/${randomUUID()}${extname(dto.originalName)}`;
+    const key = `${libraryFolderPrefix(userId, folderId)}${randomUUID()}${extname(dto.originalName)}`;
     const expiresIn = this.configService.get<number>('s3.signedUrlExpiresIn') ?? 300;
     const uploadUrl = await this.storageService.getSignedUploadUrl(key, dto.mimeType, expiresIn);
 
@@ -89,7 +93,7 @@ export class FilesService {
   async confirm(folderId: string, userId: string, dto: ConfirmFileDto): Promise<FileResponseDto> {
     await this.foldersService.findOneOrFail(folderId, userId);
 
-    const expectedPrefix = `users/${userId}/folders/${folderId}/`;
+    const expectedPrefix = libraryFolderPrefix(userId, folderId);
     if (!dto.key.startsWith(expectedPrefix)) {
       throw new ForbiddenException('La key subida no corresponde a esta carpeta');
     }
@@ -123,6 +127,11 @@ export class FilesService {
         mimeType: dto.mimeType,
         type,
         size: uploaded.size,
+        // Las dimensiones sí las manda el cliente y se guardan tal cual: el binario no pasa por
+        // aquí, así que no hay forma de medirlas en el servidor. Son opcionales a propósito —
+        // que fallen al medirse no puede impedir una subida.
+        width: dto.width ?? null,
+        height: dto.height ?? null,
       },
     });
 
@@ -162,7 +171,7 @@ export class FilesService {
   async findOwnedByUser(ids: string[], userId: string): Promise<LibraryAssetRef[]> {
     const files = await this.prisma.fileAsset.findMany({
       where: { id: { in: ids } },
-      select: { id: true, type: true, key: true, folderId: true },
+      select: { id: true, type: true, key: true, width: true, height: true, folderId: true },
     });
     if (files.length !== new Set(ids).size) {
       throw new NotFoundException('Alguno de los archivos no existe en tu biblioteca');
@@ -174,7 +183,7 @@ export class FilesService {
       folderIds.map((folderId) => this.foldersService.findOneOrFail(folderId, userId)),
     );
 
-    return files.map(({ id, type, key }) => ({ id, type, key }));
+    return files.map(({ id, type, key, width, height }) => ({ id, type, key, width, height }));
   }
 
   /**
@@ -184,7 +193,7 @@ export class FilesService {
   async findManyByIds(ids: string[]): Promise<LibraryAssetRef[]> {
     const files = await this.prisma.fileAsset.findMany({
       where: { id: { in: ids } },
-      select: { id: true, type: true, key: true },
+      select: { id: true, type: true, key: true, width: true, height: true },
     });
     return files;
   }
@@ -197,6 +206,8 @@ export class FilesService {
     mimeType: string;
     type: import('@prisma/client').FileType;
     size: number;
+    width: number | null;
+    height: number | null;
     createdAt: Date;
   }): Promise<FileResponseDto> {
     const url = await this.storageService.getSignedDownloadUrl(file.key);
@@ -207,6 +218,8 @@ export class FilesService {
       mimeType: file.mimeType,
       type: file.type,
       size: file.size,
+      width: file.width,
+      height: file.height,
       url,
       createdAt: file.createdAt,
     };

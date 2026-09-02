@@ -50,6 +50,7 @@ describe('FilesService', () => {
       getSignedUploadUrl: jest.fn().mockResolvedValue('https://signed.example/upload'),
       headObject: jest.fn().mockResolvedValue({ size: 1024 }),
       delete: jest.fn().mockResolvedValue(undefined),
+      deleteByPrefix: jest.fn().mockResolvedValue(0),
     };
     filesService = new FilesService(
       prisma as unknown as PrismaService,
@@ -140,6 +141,30 @@ describe('FilesService', () => {
         expect.objectContaining({ data: expect.objectContaining({ size: 4 * MB, type: 'AUDIO' }) }),
       );
       expect(result.size).toBe(4 * MB);
+    });
+
+    // Las dimensiones sí son del cliente: el binario no pasa por el backend y el masonry las
+    // necesita. Son opcionales para que un fallo midiendo no impida subir.
+    it('stores the dimensions the client declared', async () => {
+      await filesService.confirm('folder-1', 'user-1', {
+        ...confirmDto,
+        width: 1080,
+        height: 1350,
+      });
+
+      expect(prisma.fileAsset.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ width: 1080, height: 1350 }),
+        }),
+      );
+    });
+
+    it('stores nulls when the client did not measure them', async () => {
+      await filesService.confirm('folder-1', 'user-1', confirmDto);
+
+      expect(prisma.fileAsset.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ width: null, height: null }) }),
+      );
     });
 
     it('rejects and deletes an object that exceeds the limit on S3', async () => {

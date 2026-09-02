@@ -84,6 +84,11 @@ model FileAsset {
   mimeType     String
   type         FileType
   size         Int
+  // Dimensiones en píxeles, declaradas por el cliente al confirmar la subida (el binario nunca
+  // pasa por el backend, así que nadie más las conoce). Nulas en audio, texto y en los archivos
+  // subidos antes de la Fase 2. Las publicaciones las heredan para el masonry.
+  width        Int?
+  height       Int?
   createdAt    DateTime @default(now())
 
   folder Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)

@@ -89,16 +89,21 @@ describe('PostsService', () => {
     files = {
       findOwnedByUser: jest
         .fn()
-        .mockResolvedValue([{ id: 'file-1', type: FileType.IMAGE, key: 'users/a/f/1.png' }]),
+        .mockResolvedValue([
+          { id: 'file-1', type: FileType.IMAGE, key: 'users/a/f/1.png', width: 1600, height: 900 },
+        ]),
       findManyByIds: jest
         .fn()
-        .mockResolvedValue([{ id: 'file-1', type: FileType.IMAGE, key: 'users/a/f/1.png' }]),
+        .mockResolvedValue([
+          { id: 'file-1', type: FileType.IMAGE, key: 'users/a/f/1.png', width: 1600, height: 900 },
+        ]),
     };
     storage = {
       getSignedDownloadUrl: jest.fn().mockResolvedValue('https://signed.example/download'),
       getSignedUploadUrl: jest.fn(),
       headObject: jest.fn(),
       delete: jest.fn(),
+      deleteByPrefix: jest.fn(),
     };
     events = { emit: jest.fn() };
 
@@ -139,8 +144,8 @@ describe('PostsService', () => {
 
     it('guarda el orden de los medios según el arreglo recibido', async () => {
       files.findOwnedByUser.mockResolvedValue([
-        { id: 'file-2', type: FileType.IMAGE, key: 'k2' },
-        { id: 'file-1', type: FileType.IMAGE, key: 'k1' },
+        { id: 'file-2', type: FileType.IMAGE, key: 'k2', width: null, height: null },
+        { id: 'file-1', type: FileType.IMAGE, key: 'k1', width: null, height: null },
       ]);
 
       await service.create(AUTHOR_ID, {
@@ -204,6 +209,37 @@ describe('PostsService', () => {
         }),
       );
       expect(post.media[0].expiresAt.getTime()).toBeGreaterThan(Date.now());
+    });
+
+    // Las dimensiones son del archivo de biblioteca; el post solo las pisa si el cliente manda
+    // las suyas (decisión del dueño: "archivo, con override del cliente").
+    it('hereda las dimensiones del archivo cuando el medio no las trae', async () => {
+      prisma.post.findUnique.mockResolvedValue(
+        postRow({
+          media: [
+            {
+              id: 'media-1',
+              postId: 'post-1',
+              fileAssetId: 'file-1',
+              order: 0,
+              width: null,
+              height: null,
+            },
+          ],
+        }),
+      );
+
+      const post = await service.findOne('post-1', AUTHOR_ID);
+
+      expect(post.media[0]).toEqual(expect.objectContaining({ width: 1600, height: 900 }));
+    });
+
+    it('el override del medio gana sobre las del archivo', async () => {
+      prisma.post.findUnique.mockResolvedValue(postRow());
+
+      const post = await service.findOne('post-1', AUTHOR_ID);
+
+      expect(post.media[0]).toEqual(expect.objectContaining({ width: 800, height: 600 }));
     });
 
     it('404 si la publicación no existe', async () => {
