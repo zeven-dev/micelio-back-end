@@ -47,10 +47,30 @@ model User {
   feedColumns Int        @default(3)
   feedGap     Int        @default(2)
 
-  folders Folder[]
-  posts   Post[]
+  folders   Folder[]
+  posts     Post[]
+  following Follow[] @relation("Following")
+  followers Follow[] @relation("Followers")
 
   @@map("users")
+}
+
+/// Grafo social: A sigue a B, y opcionalmente lo marca como favorito (prioridad en su home).
+model Follow {
+  id         String   @id @default(uuid())
+  followerId String
+  followedId String
+  isFavorite Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  follower User @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followed User @relation("Followers", fields: [followedId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followedId])
+  // Los seguidos de alguien (con sus favoritos) y los seguidores de alguien son las dos
+  // lecturas del grafo: el único compuesto cubre la primera, este índice la segunda.
+  @@index([followedId])
+  @@map("follows")
 }
 
 model Folder {
