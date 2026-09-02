@@ -5,6 +5,7 @@ import { FileType } from '@prisma/client';
 import { DOMAIN_EVENTS } from '../events/domain-events';
 import { FilesService } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SocialService } from '../social/social.service';
 import { StorageService } from '../storage/storage.service';
 import { UserPublicView, UsersService } from '../users/users.service';
 import { PostsService } from './posts.service';
@@ -58,7 +59,10 @@ describe('PostsService', () => {
     findByUsername: jest.Mock;
     canViewContentOf: jest.Mock;
     getPublicViewsByIds: jest.Mock;
+    filterPublicIds: jest.Mock;
+    findPublicUserIds: jest.Mock;
   };
+  let social: { getFollowedIds: jest.Mock; getFavoriteIds: jest.Mock; getMutualIds: jest.Mock };
   let files: { findOwnedByUser: jest.Mock; findManyByIds: jest.Mock };
   let storage: jest.Mocked<StorageService>;
   let events: { emit: jest.Mock };
@@ -85,6 +89,13 @@ describe('PostsService', () => {
       findByUsername: jest.fn().mockResolvedValue({ id: AUTHOR_ID, username: 'ada' }),
       canViewContentOf: jest.fn().mockResolvedValue(true),
       getPublicViewsByIds: jest.fn().mockResolvedValue(new Map([[AUTHOR_ID, authorView]])),
+      filterPublicIds: jest.fn().mockResolvedValue([]),
+      findPublicUserIds: jest.fn().mockResolvedValue([]),
+    };
+    social = {
+      getFollowedIds: jest.fn().mockResolvedValue([]),
+      getFavoriteIds: jest.fn().mockResolvedValue([]),
+      getMutualIds: jest.fn().mockResolvedValue([]),
     };
     files = {
       findOwnedByUser: jest
@@ -110,6 +121,7 @@ describe('PostsService', () => {
     service = new PostsService(
       prisma as unknown as PrismaService,
       users as unknown as UsersService,
+      social as unknown as SocialService,
       files as unknown as FilesService,
       { get: jest.fn(() => 300) } as unknown as ConfigService,
       storage,
@@ -370,6 +382,151 @@ describe('PostsService', () => {
       prisma.post.findUnique.mockResolvedValue(postRow());
       await service.remove('post-1', AUTHOR_ID);
       expect(prisma.post.delete).toHaveBeenCalledWith({ where: { id: 'post-1' } });
+    });
+  });
+  // El algoritmo del home está especificado al detalle en `docs/API-CONTRACTS.md`: estas
+  // pruebas son la traducción literal de esa especificación.
+  describe('home feed v1', () => {
+    const HOUR = 60 * 60 * 1000;
+    const base = new Date('2026-09-01T12:00:00.000Z');
+
+    /** Un post de `authorId` creado `hoursAgo` horas antes de la marca base. */
+    function feedPost(id: string, authorId: string, hoursAgo: number) {
+      return postRow({ id, authorId, createdAt: new Date(base.getTime() - hoursAgo * HOUR) });
+    }
+
+    beforeEach(() => {
+      users.getPublicViewsByIds.mockImplementation(
+        async (ids: string[]) =>
+          new Map(ids.map((id) => [id, { ...authorView, id, username: id }])),
+      );
+    });
+
+    it('mezcla 4:1 — la quinta posición viene de descubrimiento', async () => {
+      social.getFollowedIds.mockResolvedValue(['seguido']);
+      users.filterPublicIds.mockResolvedValue(['seguido']);
+      users.findPublicUserIds.mockResolvedValue(['ajeno']);
+      prisma.post.findMany.mockImplementation(
+        async (args: { where: { authorId: { in: string[] } } }) => {
+          const authors = args.where.authorId.in;
+          if (authors.includes('seguido')) {
+            return [1, 2, 3, 4, 5, 6].map((n) => feedPost(`s${n}`, 'seguido', n));
+          }
+          if (authors.includes('ajeno')) {
+            return [1, 2].map((n) => feedPost(`d${n}`, 'ajeno', n));
+          }
+          return [];
+        },
+      );
+
+      const page = await service.getHomeFeed(VIEWER_ID, { limit: 5 });
+
+      expect(page.items.map((item) => item.id)).toEqual(['s1', 's2', 's3', 's4', 'd1']);
+    });
+
+    it('un favorito flota como si fuera 12 h más nuevo', async () => {
+      social.getFollowedIds.mockResolvedValue(['favorito', 'normal']);
+      social.getFavoriteIds.mockResolvedValue(['favorito']);
+      users.filterPublicIds.mockResolvedValue(['favorito', 'normal']);
+      users.findPublicUserIds.mockResolvedValue([]);
+      prisma.post.findMany.mockImplementation(
+        async (args: { where: { authorId: { in: string[] } } }) => {
+          if (args.where.authorId.in.includes('favorito')) return [feedPost('fav', 'favorito', 10)];
+          if (args.where.authorId.in.includes('normal')) return [feedPost('nue', 'normal', 3)];
+          return [];
+        },
+      );
+
+      const page = await service.getHomeFeed(VIEWER_ID, { limit: 5 });
+
+      // Sin boost ganaría `nue` (3 h) sobre `fav` (10 h); con las 12 h de favorito, no.
+      expect(page.items.map((item) => item.id)).toEqual(['fav', 'nue']);
+    });
+
+    it('un seguido privado sin follow mutuo no entra al home', async () => {
+      social.getFollowedIds.mockResolvedValue(['privado']);
+      users.filterPublicIds.mockResolvedValue([]); // no es público
+      social.getMutualIds.mockResolvedValue([]); // ni mutuo
+      users.findPublicUserIds.mockResolvedValue([]);
+
+      const page = await service.getHomeFeed(VIEWER_ID, { limit: 5 });
+
+      expect(page.items).toEqual([]);
+      expect(page.nextCursor).toBeNull();
+      // Sin autores visibles no se consulta la base por ese stream.
+      expect(prisma.post.findMany).not.toHaveBeenCalled();
+    });
+
+    it('un seguido privado con follow mutuo sí entra', async () => {
+      social.getFollowedIds.mockResolvedValue(['privado']);
+      users.filterPublicIds.mockResolvedValue([]);
+      social.getMutualIds.mockResolvedValue(['privado']);
+      users.findPublicUserIds.mockResolvedValue([]);
+      prisma.post.findMany.mockResolvedValue([feedPost('p1', 'privado', 1)]);
+
+      const page = await service.getHomeFeed(VIEWER_ID, { limit: 5 });
+
+      expect(page.items.map((item) => item.id)).toEqual(['p1']);
+    });
+
+    it('el descubrimiento excluye al viewer y a quienes ya sigue', async () => {
+      social.getFollowedIds.mockResolvedValue(['seguido']);
+      users.filterPublicIds.mockResolvedValue(['seguido']);
+      users.findPublicUserIds.mockResolvedValue([]);
+
+      await service.getHomeFeed(VIEWER_ID, { limit: 5 });
+
+      expect(users.findPublicUserIds).toHaveBeenCalledWith([VIEWER_ID, 'seguido']);
+    });
+
+    it('el cursor reanuda cada stream después de su marca', async () => {
+      social.getFollowedIds.mockResolvedValue(['seguido']);
+      users.filterPublicIds.mockResolvedValue(['seguido']);
+      users.findPublicUserIds.mockResolvedValue(['ajeno']);
+      prisma.post.findMany.mockImplementation(
+        async (args: { where: { authorId: { in: string[] } } }) =>
+          args.where.authorId.in.includes('seguido')
+            ? [feedPost('s1', 'seguido', 1), feedPost('s2', 'seguido', 2)]
+            : [feedPost('d1', 'ajeno', 1), feedPost('d2', 'ajeno', 2)],
+      );
+
+      const first = await service.getHomeFeed(VIEWER_ID, { limit: 1 });
+      expect(first.nextCursor).not.toBeNull();
+
+      prisma.post.findMany.mockClear();
+      await service.getHomeFeed(VIEWER_ID, { cursor: first.nextCursor!, limit: 1 });
+
+      // El stream de seguidos reanuda tras `s1`; el de descubrimiento, que no aportó nada en la
+      // primera página, sigue sin marca y arranca desde el principio.
+      const followingCall = prisma.post.findMany.mock.calls.find((call) =>
+        (call[0] as { where: { authorId: { in: string[] } } }).where.authorId.in.includes(
+          'seguido',
+        ),
+      )![0] as { where: { OR?: unknown } };
+      const discoveryCall = prisma.post.findMany.mock.calls.find((call) =>
+        (call[0] as { where: { authorId: { in: string[] } } }).where.authorId.in.includes('ajeno'),
+      )![0] as { where: { OR?: unknown } };
+
+      expect(followingCall.where.OR).toBeDefined();
+      expect(discoveryCall.where.OR).toBeUndefined();
+    });
+
+    it('sin más candidatos, la página sale corta y sin cursor', async () => {
+      social.getFollowedIds.mockResolvedValue(['seguido']);
+      users.filterPublicIds.mockResolvedValue(['seguido']);
+      users.findPublicUserIds.mockResolvedValue([]);
+      prisma.post.findMany.mockResolvedValue([feedPost('s1', 'seguido', 1)]);
+
+      const page = await service.getHomeFeed(VIEWER_ID, { limit: 20 });
+
+      expect(page.items).toHaveLength(1);
+      expect(page.nextCursor).toBeNull();
+    });
+
+    it('400 si el cursor es basura', async () => {
+      await expect(
+        service.getHomeFeed(VIEWER_ID, { cursor: 'no-es-un-cursor' }),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
   });
 });

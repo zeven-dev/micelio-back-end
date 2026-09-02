@@ -22,10 +22,49 @@ import { CreatePostDto, PostMediaInputDto } from './dto/create-post.dto';
 import { PostMediaResponseDto, PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { SocialService } from '../social/social.service';
 import { UserPublicView, UsersService } from '../users/users.service';
 import { buildTags } from './utils/tags.util';
 
 type PostWithMedia = Post & { media: PostMedia[] };
+
+/** Un candidato del home con su clave de orden ya calculada para este viewer. */
+interface RankedPost {
+  post: PostWithMedia;
+  rankAt: Date;
+}
+
+/** Boost de 12 h a los favoritos en el stream de seguidos (v1 del algoritmo). */
+const FAVORITE_BOOST_MS = 12 * 60 * 60 * 1000;
+
+/** Una de cada 5 posiciones del home viene del stream de descubrimiento. */
+const DISCOVERY_EVERY = 5;
+
+/**
+ * Cursor del home: la última entrada consumida de cada stream, `[rankAtISO, id]`.
+ * `null` = ese stream aún no ha entregado nada y arranca desde el principio.
+ */
+interface HomeCursor {
+  s: [string, string] | null;
+  d: [string, string] | null;
+}
+
+function isHomeMark(value: unknown): value is [string, string] | null {
+  return (
+    value === null ||
+    (Array.isArray(value) &&
+      value.length === 2 &&
+      typeof value[0] === 'string' &&
+      typeof value[1] === 'string')
+  );
+}
+
+function isHomeCursor(value: unknown): value is HomeCursor {
+  const cursor = value as HomeCursor | null;
+  return (
+    cursor !== null && typeof cursor === 'object' && isHomeMark(cursor.s) && isHomeMark(cursor.d)
+  );
+}
 
 /** Marca del cursor del feed propio: última posición e id consumidos. */
 interface FeedCursor {
@@ -43,6 +82,7 @@ export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
+    private readonly socialService: SocialService,
     private readonly filesService: FilesService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
@@ -209,6 +249,121 @@ export class PostsService {
     return { reordered: true };
   }
 
+  /**
+   * Home feed **v1** (Fase 3), exactamente como lo especifica `docs/API-CONTRACTS.md`:
+   * dos streams de candidatos —seguidos (S) y descubrimiento (D)—, `rankAt` = `createdAt` con
+   * **+12 h a los favoritos** en S, orden `rankAt` desc con desempate `id` desc, y una mezcla
+   * 4:1 (cada posición múltiplo de 5 viene de D). Determinista: mismo viewer y mismo cursor
+   * dan la misma página. La afinidad (v2) llega en la Fase 5 y no cambia ni la respuesta ni el
+   * cursor.
+   */
+  async getHomeFeed(
+    viewerId: string,
+    query: CursorPaginationDto,
+  ): Promise<CursorPage<PostResponseDto>> {
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+    const cursor = query.cursor ? decodeCursor(query.cursor, isHomeCursor) : null;
+
+    const [followedIds, favoriteIds, mutualIds] = await Promise.all([
+      this.socialService.getFollowedIds(viewerId),
+      this.socialService.getFavoriteIds(viewerId),
+      this.socialService.getMutualIds(viewerId),
+    ]);
+
+    // Visibilidad (regla de `social`): de los seguidos, se ven los públicos y los de follow
+    // mutuo. Un seguido privado que no me sigue de vuelta no aporta nada al home.
+    const publicFollowed = await this.usersService.filterPublicIds(followedIds);
+    const visibleFollowed = new Set([...publicFollowed, ...mutualIds]);
+    const favorites = favoriteIds.filter((id) => visibleFollowed.has(id));
+    const plain = [...visibleFollowed].filter((id) => !favorites.includes(id));
+
+    // Descubrimiento: perfiles públicos que el viewer no sigue (ni él mismo).
+    const discoveryIds = await this.usersService.findPublicUserIds([viewerId, ...followedIds]);
+
+    const [boosted, unboosted, discovery] = await Promise.all([
+      this.fetchRanked(favorites, FAVORITE_BOOST_MS, cursor?.s ?? null, limit),
+      this.fetchRanked(plain, 0, cursor?.s ?? null, limit),
+      this.fetchRanked(discoveryIds, 0, cursor?.d ?? null, limit),
+    ]);
+
+    // S es la unión de favoritos (con boost) y no favoritos, reordenada por `rankAt`.
+    const following = [...boosted, ...unboosted].sort(compareRanked).slice(0, limit + 1);
+
+    const items: RankedPost[] = [];
+    let sIndex = 0;
+    let dIndex = 0;
+    for (let position = 1; position <= limit; position += 1) {
+      const preferDiscovery = position % DISCOVERY_EVERY === 0;
+      const takeFrom = (fromDiscovery: boolean) =>
+        fromDiscovery ? discovery[dIndex] : following[sIndex];
+
+      let fromDiscovery = preferDiscovery;
+      let next = takeFrom(fromDiscovery);
+      if (!next) {
+        // Si el stream que toca se agotó, la posición la llena el otro.
+        fromDiscovery = !preferDiscovery;
+        next = takeFrom(fromDiscovery);
+      }
+      if (!next) break;
+
+      if (fromDiscovery) dIndex += 1;
+      else sIndex += 1;
+      items.push(next);
+    }
+
+    const lastS = sIndex > 0 ? following[sIndex - 1] : undefined;
+    const lastD = dIndex > 0 ? discovery[dIndex - 1] : undefined;
+    const hasMore = following.length > sIndex || discovery.length > dIndex;
+    const nextCursor = hasMore
+      ? encodeCursor({
+          // Si un stream no aportó nada en esta página, conserva su marca anterior para no
+          // reiniciarlo desde el principio en la siguiente.
+          s: lastS ? markOf(lastS) : (cursor?.s ?? null),
+          d: lastD ? markOf(lastD) : (cursor?.d ?? null),
+        } satisfies HomeCursor)
+      : null;
+
+    return {
+      items: await this.toResponseList(
+        items.map((item) => item.post),
+        viewerId,
+      ),
+      nextCursor,
+    };
+  }
+
+  /**
+   * Candidatos de un stream: posts de esos autores, más nuevos primero, reanudando después de
+   * la marca del cursor. `boostMs` desplaza el `rankAt` (los favoritos flotan 12 h), y por eso
+   * la marca se traduce a `createdAt` restándolo antes de comparar.
+   */
+  private async fetchRanked(
+    authorIds: string[],
+    boostMs: number,
+    mark: [string, string] | null,
+    limit: number,
+  ): Promise<RankedPost[]> {
+    if (authorIds.length === 0) return [];
+
+    const after = mark ? new Date(new Date(mark[0]).getTime() - boostMs) : null;
+    const posts = await this.prisma.post.findMany({
+      where: {
+        authorId: { in: authorIds },
+        ...(after && mark
+          ? { OR: [{ createdAt: { lt: after } }, { createdAt: after, id: { lt: mark[1] } }] }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: { media: { orderBy: { order: 'asc' } } },
+    });
+
+    return posts.map((post) => ({
+      post,
+      rankAt: new Date(post.createdAt.getTime() + boostMs),
+    }));
+  }
+
   private async findOwnedOrFail(id: string, authorId: string): Promise<PostWithMedia> {
     const post = await this.prisma.post.findUnique({
       where: { id },
@@ -312,6 +467,16 @@ export class PostsService {
       height: media.height ?? asset.height,
     };
   }
+}
+
+/** Orden del home: `rankAt` desc, desempate por `id` desc. */
+function compareRanked(a: RankedPost, b: RankedPost): number {
+  const byRank = b.rankAt.getTime() - a.rankAt.getTime();
+  return byRank !== 0 ? byRank : b.post.id.localeCompare(a.post.id);
+}
+
+function markOf(item: RankedPost): [string, string] {
+  return [item.rankAt.toISOString(), item.post.id];
 }
 
 /** Filas de `post_media` a partir del arreglo del cliente: el índice **es** el orden. */

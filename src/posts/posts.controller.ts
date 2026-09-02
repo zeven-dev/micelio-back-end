@@ -27,6 +27,15 @@ import { PostsService } from './posts.service';
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
+  /**
+   * Home: el algoritmo vive en el servicio (`docs/API-CONTRACTS.md`). El cliente solo pagina
+   * con `nextCursor` y **deduplica por `id`** al concatenar páginas.
+   */
+  @Get('feed')
+  feed(@CurrentUser() user: AuthenticatedUser, @Query() query: CursorPaginationDto) {
+    return this.postsService.getHomeFeed(user.id, query);
+  }
+
   @Post('posts')
   create(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreatePostDto) {
     return this.postsService.create(user.id, dto);
