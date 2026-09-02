@@ -38,10 +38,16 @@ otro módulo).
   - `getPublicViewsByIds(ids, viewerId?)` — `UserPublic` de varios usuarios de un golpe
     (evita una consulta y una firma de avatar por publicación).
 
+## Grafo social (Fase 3)
+- `followersCount`, `followingCount`, `viewerFollows` y `followsViewer` son **reales**: los
+  aporta `SocialService.getGraphInfoFor`, y `users` los pide una sola vez por página de
+  perfiles. Este módulo **no** consulta `follows` con Prisma.
+- La vista extendida (`bio`, `feedSettings`) de un perfil privado se abre con **follow mutuo**;
+  la decisión la toma `social`, aquí solo se aplica.
+- `users` y `social` se inyectan con `forwardRef`: es un ciclo real del dominio, documentado en
+  `docs/ARCHITECTURE.md`.
+
 ## Desviaciones documentadas de `API-CONTRACTS.md` (ver también `docs/STATUS.md`)
-- `followersCount`, `followingCount`, `viewerFollows`, `followsViewer`: siempre `0`/`false`
-  hasta que exista `Follow` (módulo `social`, Fase 3). No son un placeholder falso: hoy es el
-  valor real (nadie sigue a nadie todavía).
 - `feedSettings` ya existe desde la Fase 2 (`feedLayout/feedColumns/feedGap` en `User`) y viaja
   en todo `UserPublic` **extendido**; en la vista limitada de un perfil privado se omite, igual
   que `bio`. Valores por defecto: `GRID`, 3 columnas, gap 2.

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { SocialService } from '../social/social.service';
 import { StorageService } from '../storage/storage.service';
 import { UsersService } from './users.service';
 
@@ -21,6 +22,19 @@ describe('UsersService', () => {
   };
   let storage: jest.Mocked<StorageService>;
   let configService: ConfigService;
+  let social: {
+    getGraphInfoFor: jest.Mock;
+    canViewWithGraph: jest.Mock;
+    canView: jest.Mock;
+  };
+
+  /** Grafo vacío: nadie sigue a nadie, que es el estado por defecto de estas pruebas. */
+  const emptyGraph = {
+    followersCount: 0,
+    followingCount: 0,
+    viewerFollows: false,
+    followsViewer: false,
+  };
 
   const baseUser = {
     id: 'user-1',
@@ -60,7 +74,32 @@ describe('UsersService', () => {
     configService = {
       get: jest.fn((key: string) => (key === 'uploads.maxAvatarMb' ? 5 : 300)),
     } as unknown as ConfigService;
-    usersService = new UsersService(prisma as unknown as PrismaService, configService, storage);
+    social = {
+      getGraphInfoFor: jest.fn(async (ids: string[]) => new Map(ids.map((id) => [id, emptyGraph]))),
+      // La regla real vive en `social`; aquí se replica su semántica para no acoplar las
+      // pruebas de `users` a su implementación.
+      canViewWithGraph: jest.fn(
+        (
+          owner: { id: string; isPublic: boolean },
+          viewerId: string | undefined,
+          graph: { viewerFollows: boolean; followsViewer: boolean },
+        ) =>
+          // `viewerId !== undefined` es parte de la regla real: un visitante sin sesión nunca
+          // debe volverse "el dueño" por comparar dos `undefined`.
+          (viewerId !== undefined && viewerId === owner.id) ||
+          owner.isPublic ||
+          (graph.viewerFollows && graph.followsViewer),
+      ),
+      canView: jest.fn(async (owner: { id: string; isPublic: boolean }, viewerId?: string) =>
+        viewerId !== undefined && viewerId === owner.id ? true : owner.isPublic,
+      ),
+    };
+    usersService = new UsersService(
+      prisma as unknown as PrismaService,
+      configService,
+      storage,
+      social as unknown as SocialService,
+    );
   });
 
   describe('getPublicProfile', () => {
@@ -195,17 +234,62 @@ describe('UsersService', () => {
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
     });
 
-    it('un tercero solo si el perfil es público', async () => {
-      prisma.user.findUnique.mockResolvedValue({ isPublic: true });
+    it('un tercero solo si el perfil es público (la decide `social`)', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1', isPublic: true });
       await expect(usersService.canViewContentOf('user-1', 'otro')).resolves.toBe(true);
 
-      prisma.user.findUnique.mockResolvedValue({ isPublic: false });
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1', isPublic: false });
       await expect(usersService.canViewContentOf('user-1', 'otro')).resolves.toBe(false);
+      expect(social.canView).toHaveBeenCalled();
     });
 
     it('un usuario inexistente no muestra contenido', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
       await expect(usersService.canViewContentOf('fantasma')).resolves.toBe(false);
+    });
+  });
+
+  // Fase 3: los cuatro campos sociales de `UserPublic` los aporta el grafo, y el follow mutuo
+  // abre la vista extendida de un perfil privado.
+  describe('grafo social en UserPublic', () => {
+    it('devuelve los conteos y la relación que reporta `social`', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: true });
+      social.getGraphInfoFor.mockResolvedValue(
+        new Map([
+          [
+            'user-1',
+            { followersCount: 3, followingCount: 7, viewerFollows: true, followsViewer: false },
+          ],
+        ]),
+      );
+
+      const result = await usersService.getPublicProfile('ada', 'otro');
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          followersCount: 3,
+          followingCount: 7,
+          viewerFollows: true,
+          followsViewer: false,
+        }),
+      );
+    });
+
+    it('abre la vista extendida de un perfil privado con follow mutuo', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: false, bio: 'Hola' });
+      social.getGraphInfoFor.mockResolvedValue(
+        new Map([
+          [
+            'user-1',
+            { followersCount: 1, followingCount: 1, viewerFollows: true, followsViewer: true },
+          ],
+        ]),
+      );
+
+      const result = await usersService.getPublicProfile('ada', 'otro');
+
+      expect(result.bio).toBe('Hola');
+      expect(result.feedSettings).toBeDefined();
     });
   });
 

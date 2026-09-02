@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   ForbiddenException,
   Inject,
   Injectable,
@@ -12,6 +13,7 @@ import { FeedLayout, Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { BYTES_PER_MB } from '../files/utils/file-type.util';
 import { PrismaService } from '../prisma/prisma.service';
+import { SocialGraphInfo, SocialService } from '../social/social.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { ConfirmAvatarDto } from './dto/confirm-avatar.dto';
 import { PresignAvatarDto } from './dto/presign-avatar.dto';
@@ -61,6 +63,9 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
+    // El grafo social (conteos, follows, regla de visibilidad) vive en `social`; `users` solo
+    // lo consume. Ver la nota de `forwardRef` en `SocialService`.
+    @Inject(forwardRef(() => SocialService)) private readonly socialService: SocialService,
   ) {}
 
   findByEmail(email: string) {
@@ -89,7 +94,7 @@ export class UsersService {
 
   async getMe(userId: string): Promise<MeView> {
     const user = await this.requireById(userId);
-    const publicView = await this.toUserPublic(user, { includeExtended: true });
+    const publicView = await this.buildView(user, userId);
     return { ...publicView, email: user.email, role: user.role };
   }
 
@@ -108,7 +113,7 @@ export class UsersService {
         feedGap: dto.feedSettings?.gap,
       },
     });
-    const publicView = await this.toUserPublic(updated, { includeExtended: true });
+    const publicView = await this.buildView(updated, userId);
     return { ...publicView, email: updated.email, role: updated.role };
   }
 
@@ -176,7 +181,7 @@ export class UsersService {
       }
     }
 
-    const publicView = await this.toUserPublic(updated, { includeExtended: true });
+    const publicView = await this.buildView(updated, userId);
     return { ...publicView, email: updated.email, role: updated.role };
   }
 
@@ -189,17 +194,13 @@ export class UsersService {
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
     }
-    // La regla completa de visibilidad (follow mutuo) llega en la Fase 3 con el
-    // módulo `social`; por ahora solo existe el propio perfil y el flag `isPublic`.
-    const hasAccess = (viewerId !== undefined && user.id === viewerId) || user.isPublic;
-    return this.toUserPublic(user, { includeExtended: hasAccess });
+    return this.buildView(user, viewerId);
   }
 
   /**
-   * ¿Puede `viewerId` ver el contenido de `ownerId`? Fase 2: el dueño siempre; cualquiera si el
-   * perfil es público. El **follow mutuo** llega en la Fase 3 con el módulo `social`, que se
-   * lleva esta regla a su helper único — hasta entonces vive aquí, en un solo lugar, para que
-   * `posts` no la reimplemente.
+   * ¿Puede `viewerId` ver el contenido de `ownerId`? La **decisión** vive en `social`
+   * (`canView`: el dueño, un perfil público, o follow mutuo); aquí solo se carga el dueño,
+   * que es el dato de este dominio.
    */
   async canViewContentOf(ownerId: string, viewerId?: string): Promise<boolean> {
     if (viewerId !== undefined && viewerId === ownerId) {
@@ -207,9 +208,34 @@ export class UsersService {
     }
     const owner = await this.prisma.user.findUnique({
       where: { id: ownerId },
-      select: { isPublic: true },
+      select: { id: true, isPublic: true },
     });
-    return owner?.isPublic ?? false;
+    if (!owner) return false;
+    return this.socialService.canView(owner, viewerId);
+  }
+
+  /** De un conjunto de usuarios, cuáles son públicos. Lo usa el home feed para su stream S. */
+  async filterPublicIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids }, isPublic: true },
+      select: { id: true },
+    });
+    return users.map((user) => user.id);
+  }
+
+  /**
+   * Ids de perfiles públicos, excluyendo los que se pasen. Alimenta el stream de descubrimiento
+   * del home feed. *Límite conocido:* trae todos los ids públicos; a partir de unos miles de
+   * usuarios habrá que denormalizar `isPublic` en `Post` o materializar el stream (anotado en
+   * `docs/STATUS.md`), porque `posts` no puede unir con la tabla `users` (regla 7).
+   */
+  async findPublicUserIds(excludeIds: string[]): Promise<string[]> {
+    const users = await this.prisma.user.findMany({
+      where: { isPublic: true, ...(excludeIds.length > 0 ? { id: { notIn: excludeIds } } : {}) },
+      select: { id: true },
+    });
+    return users.map((user) => user.id);
   }
 
   /**
@@ -220,14 +246,38 @@ export class UsersService {
     ids: string[],
     viewerId?: string,
   ): Promise<Map<string, UserPublicView>> {
-    const users = await this.prisma.user.findMany({ where: { id: { in: [...new Set(ids)] } } });
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+
+    const users = await this.prisma.user.findMany({ where: { id: { in: unique } } });
+    // Un solo viaje al grafo para todos los usuarios de la página, no cuatro consultas por cada.
+    const graph = await this.socialService.getGraphInfoFor(
+      users.map((user) => user.id),
+      viewerId,
+    );
     const views = await Promise.all(
-      users.map(async (user) => {
-        const hasAccess = (viewerId !== undefined && user.id === viewerId) || user.isPublic;
-        return [user.id, await this.toUserPublic(user, { includeExtended: hasAccess })] as const;
-      }),
+      users.map(
+        async (user) =>
+          [user.id, await this.buildView(user, viewerId, graph.get(user.id))] as const,
+      ),
     );
     return new Map(views);
+  }
+
+  /**
+   * `UserPublic` de un usuario: datos del perfil + lo que aporta el grafo social, y la vista
+   * extendida (bio y ajustes de feed) solo para quien puede ver su contenido — la decisión la
+   * toma `social`, que es donde vive la regla.
+   */
+  private async buildView(
+    user: User,
+    viewerId?: string,
+    graph?: SocialGraphInfo,
+  ): Promise<UserPublicView> {
+    const info =
+      graph ?? (await this.socialService.getGraphInfoFor([user.id], viewerId)).get(user.id)!;
+    const includeExtended = this.socialService.canViewWithGraph(user, viewerId, info);
+    return this.toUserPublic(user, { includeExtended, graph: info });
   }
 
   private async requireById(id: string): Promise<User> {
@@ -240,7 +290,7 @@ export class UsersService {
 
   private async toUserPublic(
     user: User,
-    opts: { includeExtended: boolean },
+    opts: { includeExtended: boolean; graph: SocialGraphInfo },
   ): Promise<UserPublicView> {
     const avatarUrl = user.avatarKey
       ? await this.storageService.getSignedDownloadUrl(user.avatarKey)
@@ -252,12 +302,10 @@ export class UsersService {
       name: user.name ?? '',
       avatarUrl,
       isPublic: user.isPublic,
-      // Followers/following y follows mutuos dependen del módulo `social` (Fase 3),
-      // que todavía no existe: hasta entonces el conteo real es cero para todos.
-      followersCount: 0,
-      followingCount: 0,
-      viewerFollows: false,
-      followsViewer: false,
+      followersCount: opts.graph.followersCount,
+      followingCount: opts.graph.followingCount,
+      viewerFollows: opts.graph.viewerFollows,
+      followsViewer: opts.graph.followsViewer,
     };
 
     if (!opts.includeExtended) {

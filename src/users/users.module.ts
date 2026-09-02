@@ -1,4 +1,5 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
+import { SocialModule } from '../social/social.module';
 import { StorageModule } from '../storage/storage.module';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -7,7 +8,7 @@ import { UsersService } from './users.service';
 // así que la API no recibe binarios. `UsersService` valida el peso contra `UPLOAD_MAX_AVATAR_MB`
 // y, al confirmar, contra el tamaño real que reporta S3.
 @Module({
-  imports: [StorageModule],
+  imports: [StorageModule, forwardRef(() => SocialModule)],
   controllers: [UsersController],
   providers: [UsersService],
   exports: [UsersService],
