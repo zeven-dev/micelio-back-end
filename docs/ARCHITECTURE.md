@@ -27,9 +27,12 @@ aislados, infraestructura intercambiable — se logra con las reglas de abajo.
 3. **Eventos de dominio como columna vertebral.** Se usa `@nestjs/event-emitter`. Toda acción
    relevante emite un evento tipado (`post.liked`, `post.unliked`, `comment.created`,
    `post.saved`, `post.unsaved`, `post.shared`, `message.sent`, `post.created`,
-   `user.followed`…) definido en `src/events/` (contratos compartidos, sin lógica). *Por qué:*
-   desacopla productores de consumidores y hace posibles los módulos que solo consumen eventos
-   (`notifications`, `ranking`).
+   `user.followed`, `folder.deleted`…) definido en `src/events/` (contratos compartidos, sin
+   lógica). *Por qué:* desacopla productores de consumidores y hace posibles los módulos que
+   solo consumen eventos (`notifications`, `ranking`).
+   *(`folder.deleted` se agregó el 2026-09-02, con acuerdo del dueño, para que `files` limpie
+   los binarios de S3 al borrarse una carpeta sin que `folders` tenga que conocer sus tablas:
+   es el primer caso donde un evento resuelve una dependencia que sería circular.)*
 4. **Infraestructura detrás de interfaces.** Todo servicio externo se abstrae como el actual
    `StorageService` (interfaz + implementación): futuro proveedor de pagos, futura validación
    contra la base de datos de la Universidad de Antioquia. Cambiar de proveedor no debe tocar

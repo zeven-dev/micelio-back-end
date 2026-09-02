@@ -73,10 +73,10 @@ La **cédula nunca se devuelve** en ninguna respuesta, ni siquiera en `me`.
 ```
 `likeCount` **solo** se incluye cuando el viewer es el autor; para cualquier otro viewer el
 campo **se omite** (no se manda en 0 — se omite). `width`/`height` son necesarios para el
-masonry de los clientes: los **declara el cliente al publicar** (el binario nunca pasa por el
-backend, así que el servidor no puede medirlos) y se devuelven como `number | null` — nulos en
-audio y texto, que no tienen relación de aspecto. Cada medio trae además su `url` firmada y el
-`expiresAt` correspondiente.
+masonry de los clientes: salen del **archivo de biblioteca** (se declaran al subirlo, ver
+"Subida directa a S3"), y lo que el cliente mande al publicar los **pisa**. Se devuelven como
+`number | null` — nulos en audio, texto y en archivos subidos antes de que existiera el campo.
+Cada medio trae además su `url` firmada y el `expiresAt` correspondiente.
 
 **Etiquetas (`tags`):** al crear/editar un post el cliente manda `tags: string[]` explícitas y
 el servidor además extrae todo token `#palabra` de la descripción y lo fusiona. Normalización
@@ -138,6 +138,9 @@ sigue siendo `GET /api/users/:username`.
 | `PATCH /api/posts/:id` | `{ description?, tags?, media? }` | `Post` |
 | `DELETE /api/posts/:id` | — | `204` |
 
+- **`width`/`height` en `media` son opcionales y son un override**: por defecto las dimensiones
+  salen del archivo de biblioteca; mandarlas solo tiene sentido si el cliente presenta ese medio
+  con otra relación de aspecto.
 - **`media` es el orden**: el índice en el arreglo se persiste como `order` y es el orden del
   carrusel. Entre 1 y 10 medios; todos deben ser archivos **de la biblioteca del autor**
   (`404`/`403` si no) y ninguno puede repetirse en la misma publicación (`400`).
@@ -185,8 +188,12 @@ el bucket. Patrón idéntico en ambos recursos, dos pasos:
    por `/api`.
 3. **Confirm** — solo después de que el PUT anterior responda `200`.
    - Biblioteca: `POST /api/folders/:folderId/files/confirm`
-     body `{ "key", "originalName", "mimeType", "size" }` → `FileAsset` (forma sin cambios:
-     `{ id, folderId, originalName, mimeType, type, size, url, createdAt }`).
+     body `{ "key", "originalName", "mimeType", "size", "width"?, "height"? }` → `FileAsset`
+     (`{ id, folderId, originalName, mimeType, type, size, width, height, url, createdAt }`).
+     **`width`/`height` son opcionales** y en píxeles: el cliente los mide antes de confirmar
+     (imagen y video), el servidor no puede —el binario no pasa por él— y las publicaciones los
+     heredan para el masonry. Si faltan, quedan `null` y ese medio se dibuja cuadrado: un fallo
+     midiendo nunca debe impedir una subida.
    - Avatar: `PATCH /api/users/me/avatar` body `{ "key": "string" }` → `Me` (sin cambios de
      forma).
    - El backend verifica con `HeadObject` que el objeto **ya existe** en S3 antes de crear el
@@ -381,3 +388,4 @@ Con `q` presente, después de filtrar por visibilidad:
 | 2026-08-31 | Documento creado: convenciones, formas de recursos, contratos finos y algoritmo del feed | Eliminar ambigüedad para los agentes de las Fases 2–8 |
 | 2026-08-31 | Etiquetas en Post; afinidad usuario→usuario y usuario→etiqueta con pesos y decaimiento; feed v2; `GET /api/explore`; orden de búsqueda | Decisión del dueño: ranking personalizado del home y la búsqueda |
 | 2026-09-01 | Fase 2: sección "Publicaciones — Fase 2" con el CRUD de `posts` y el listado por perfil (formas que el documento no fijaba); `width`/`height` de `Post.media` documentados como `number \| null` declarados por el cliente | Implementación de la Fase 2: el contrato definía la forma de `Post` pero no cómo se crea, edita, lista ni borra |
+| 2026-09-02 | `confirm` de biblioteca acepta `width`/`height` opcionales y `FileAsset` los devuelve; `Post.media` los hereda del archivo y el cliente puede pisarlos al publicar | Decisión del dueño: medir al subir para que web y app pinten igual, con override por si un cliente recorta el medio |

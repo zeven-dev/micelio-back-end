@@ -94,6 +94,7 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 | mimeType | string | |
 | type | enum `IMAGE\|VIDEO\|AUDIO\|TEXT` | derivado del mimeType |
 | size | int | bytes — el que reporta S3 (`HeadObject`), no el que declara el cliente |
+| width / height | int? | píxeles **declarados por el cliente** al confirmar la subida (el binario nunca pasa por el backend). Nulos en audio, texto y en todo lo subido antes de la Fase 2. Las publicaciones los heredan para el masonry |
 
 ### Enum FileType
 `IMAGE | VIDEO | AUDIO | TEXT`. `AUDIO` entró en la Fase 1 (biblioteca completa, para obra
@@ -133,23 +134,23 @@ Une una publicación con archivos de la biblioteca (**no** se duplica el binario
 | postId | FK → Post | cascade delete |
 | fileAssetId | FK → FileAsset | **`onDelete: Restrict`** (ver abajo) |
 | order | int | posición en el carrusel; es el índice del arreglo que manda el cliente |
-| width / height | int? | píxeles **declarados por el cliente** al publicar; nulos en audio/texto |
+| width / height | int? | **override** opcional de las dimensiones del archivo; normalmente nulos (ver abajo) |
 
 Único `(postId, fileAssetId)`: un archivo no se repite dentro de la misma publicación.
 
-**Decisión pendiente de la Fase 2, ya tomada: borrar un `FileAsset` usado por un `Post` se
-bloquea.** La FK es `Restrict`, así que `DELETE /api/files/:id` responde `409` y `DELETE
+**Decisión de la Fase 2, confirmada por el dueño el 2026-09-02: borrar un `FileAsset` usado por
+un `Post` se bloquea.** La FK es `Restrict`, así que `DELETE /api/files/:id` responde `409` y `DELETE
 /api/folders/:id` también si algún archivo del subárbol está publicado (la cascada se detiene y
 Postgres aborta el borrado). *Por qué bloquear y no cascadear:* una publicación sin medio es una
 publicación rota, y el usuario tiene la acción alternativa a mano (borrar la publicación).
 *Por qué no "marcar":* obligaría a inventar un estado de medio ausente que ningún contrato
 define.
 
-**Por qué `width`/`height` viven aquí y no en `FileAsset`:** el binario nunca pasa por el
-backend (subida directa a S3), así que el servidor no puede medir la imagen; el único que
-conoce las dimensiones es el cliente que la publica. Ponerlas en `FileAsset` obligaría además a
-cambiar la forma de respuesta de `files`, que los dos clientes ya consumen. Ver `STATUS.md`
-(2026-09-01, Fase 2) — es una ambigüedad que el contrato no resolvía.
+**`width`/`height` aquí son un override.** La fuente normal es el `FileAsset` (se miden **al
+subir a la biblioteca**, decisión del dueño del 2026-09-02): así web y app pintan igual el mismo
+archivo. Estas columnas solo pisan ese valor cuando el cliente manda dimensiones al publicar
+—útil si alguna vez se recorta un medio al publicarlo— y quedan nulas en el caso normal.
+Lectura: `PostMedia.width ?? FileAsset.width`.
 
 ### Ajustes de feed en User (Fase 2)
 `feedLayout` (enum `FeedLayout`: `GRID | MASONRY`, default `GRID`), `feedColumns` (int,
@@ -252,3 +253,4 @@ Ver `Post`, `PostMedia` y los ajustes de feed en "Entidades existentes" arriba.
 | 2026-08-31 | Fase 0 implementada: `User` gana `cedula`, `username`, `role`, `bio`, `avatarKey`, `isPublic`; nuevo enum `Role`; migración `20260831000000_extend_user_identity_roles` | Cierre de la Fase 0 del `ROADMAP.md` |
 | 2026-09-01 | Fase 1 implementada: `Folder` gana `parentId` (sub-carpetas, unicidad por hermanos + índice parcial para la raíz); `FileType` gana `AUDIO`; migración `20260901000000_add_subfolders_and_audio` | Cierre de la Fase 1 del `ROADMAP.md` |
 | 2026-09-01 | Fase 2 implementada: `Post` (tags con índice GIN, `position`), `PostMedia` (`Restrict` sobre `FileAsset`, `width`/`height` declarados por el cliente) y ajustes de feed en `User` (`feedLayout`/`feedColumns`/`feedGap`); migración `20260901120000_add_posts_and_feed_settings` | Cierre de la Fase 2 del `ROADMAP.md` |
+| 2026-09-02 | `FileAsset` gana `width`/`height` (opcionales, declaradas por el cliente al confirmar); las publicaciones las heredan y `PostMedia.width/height` queda como override; migración `20260902000000_add_file_asset_dimensions` | Decisión del dueño: medir al subir a la biblioteca para que web y app pinten igual el mismo archivo |

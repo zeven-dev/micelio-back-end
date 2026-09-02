@@ -65,9 +65,11 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   nombres (`DOMAIN_EVENTS`) y las formas (interfaces) de los eventos de dominio ya nombrados en
   `ARCHITECTURE.md` (`post.created`, `post.liked`, `post.unliked`, `post.saved`, `post.unsaved`,
   `post.shared`, `comment.created`, `message.sent`, `user.followed`).
-- **Notas:** desde la Fase 2 hay **un productor**: `posts` emite `post.created` al publicar.
-  Consumidores sigue sin haber (`ranking` en la Fase 5, `notifications` en la Fase 7), y el
-  resto de los eventos siguen siendo scaffold — sus productores llegan con `social`/`chat`
+- **Notas:** desde la Fase 2 hay productores y un consumidor reales: `posts` emite
+  `post.created` (nadie lo escucha aún) y `folders` emite `folder.deleted`, que **sí** consume
+  `files` para limpiar S3. `folder.deleted` no estaba en la lista original de
+  `ARCHITECTURE.md`: se agregó al resolver los huérfanos de S3 sin romper la frontera entre
+  módulos. El resto sigue siendo scaffold — sus productores llegan con `social`/`chat`
   (Fases 3, 4 y 6).
 
 ### Perfil de usuario (Fase 0; avatar rehecho a subida directa en Fase 0.5)
@@ -111,15 +113,19 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   `assertMoveIsLegal`, que sube por los ancestros del nuevo padre para rechazar ciclos
   (→ `400`). Borrar cascadea por FK a las sub-carpetas y a las filas `FileAsset` del subárbol.
 - **Notas:** en `PATCH`, `parentId` ausente = no mover; `parentId: null` = mover a la raíz.
-  **Hueco conocido:** la cascada borra las filas de archivos pero **no** los objetos en S3, que
-  quedan huérfanos en el bucket (ya pasaba antes de la Fase 1; con sub-carpetas afecta a un
-  subárbol entero). Arreglarlo cruza dominios y necesita decisión de arquitectura — ver
-  `src/folders/AGENTS.md` y `docs/STATUS.md`.
+  Desde el 2026-09-02 el borrado emite `folder.deleted` y `files` limpia los objetos de S3 del
+  subárbol (ver "Limpieza de S3 al borrar una carpeta"): el hueco de los huérfanos que venía de
+  la Fase 1 quedó cerrado.
 
 ### Subida y gestión de archivos de biblioteca (subida directa a S3 desde Fase 0.5)
 - **Módulos:** `src/files`, `src/storage`
 - **Disparadores:** `POST /api/folders/:id/files/presign`, `POST /api/folders/:id/files/confirm`,
   `GET /api/folders/:id/files`, `DELETE /api/files/:id`
+- **Dimensiones (desde 2026-09-02):** `confirm` acepta `width`/`height` **opcionales** en
+  píxeles y los persiste en `FileAsset`; las publicaciones los heredan (`Post.media`), así que
+  web y app pintan igual el mismo archivo. El servidor no puede medirlos —el binario nunca pasa
+  por él— y por eso son opcionales: un fallo midiendo en el cliente no puede impedir una subida
+  (queda `null` y ese medio se dibuja cuadrado).
 - **Pasos:** el backend **ya no recibe binarios** (se quitó `FileInterceptor`/Multer de este
   módulo y el registro de `MulterModule` que había quedado suelto). `presign` valida propiedad de
   la carpeta + mimeType y el tamaño declarado contra el tope configurado del tipo
@@ -172,6 +178,24 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   píxeles: la traducción a píxeles es de cada cliente. Los visitantes ven el feed exactamente
   como lo curó el dueño.
 
+### Limpieza de S3 al borrar una carpeta (evento `folder.deleted`)
+- **Módulos:** `src/folders` (emite), `src/files` (consume), `src/storage`
+- **Disparador:** `DELETE /api/folders/:id` exitoso
+- **Pasos:** `FoldersService.remove` recoge los ids del **subárbol completo antes de borrar**
+  (`collectSubtreeIds`, por niveles y topeado con `MAX_TREE_DEPTH`) → borra la carpeta (la
+  cascada se lleva sub-carpetas y filas de archivos) → emite `folder.deleted`
+  (`{ userId, folderIds }`). `FilesCleanupListener` (`src/files/files-cleanup.listener.ts`)
+  escucha y, por cada carpeta, borra en S3 **por prefijo**
+  (`users/{userId}/folders/{folderId}/`, `StorageService.deleteByPrefix`, que lista y borra por
+  páginas de 1000).
+- **Notas:** cierra el hueco de los objetos huérfanos que venía desde la Fase 1. Va por evento y
+  no por llamada directa porque `folders` no puede consultar `file_assets` (regla 7) y `files`
+  ya importa a `folders` — la dependencia inversa sería circular. Se barre **por prefijo** y no
+  por lista de keys porque, cuando el listener corre, las filas ya no existen: el prefijo es el
+  único rastro. El esquema de keys vive en `src/files/utils/library-key.util.ts`, que es el
+  módulo que las genera. Un fallo de S3 se registra y **no** se propaga: la carpeta ya se borró
+  y el usuario ya recibió su `204`. Si el borrado se bloquea con `409`, no se emite nada.
+
 ### Borrado de archivos y carpetas con contenido publicado (Fase 2)
 - **Módulos:** `src/files`, `src/folders`
 - **Disparadores:** `DELETE /api/files/:id`, `DELETE /api/folders/:id`
@@ -180,9 +204,9 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   responde `P2003`, se traduce a `409` y el binario queda intacto. En `folders`, la cascada
   carpeta → sub-carpetas → archivos se detiene por la misma FK y aborta el borrado completo:
   también `409`.
-- **Notas:** decisión registrada en `docs/DATA-MODEL.md` (bloquear, no cascadear ni marcar). El
-  hueco de los objetos huérfanos en S3 al borrar carpetas sigue abierto y **sin cambios** — ver
-  `src/folders/AGENTS.md` y `docs/STATUS.md`.
+- **Notas:** decisión registrada en `docs/DATA-MODEL.md` y confirmada por el dueño el
+  2026-09-02 (bloquear, no cascadear ni marcar). Los binarios huérfanos al borrar una carpeta ya
+  no son un hueco: los limpia el listener de `folder.deleted` (arriba).
 
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`

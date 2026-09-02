@@ -20,6 +20,40 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-02 — Decisiones del dueño sobre la Fase 2 (tarea)
+- **Listo:**
+  - **Dimensiones en la biblioteca.** `FileAsset` gana `width`/`height` (`Int?`), migración
+    `20260902000000_add_file_asset_dimensions`. `POST .../files/confirm` los acepta
+    **opcionales** y `FileAsset` los devuelve; `Post.media` los **hereda** del archivo y lo que
+    el cliente mande al publicar los pisa (decisión: "archivo, con override del cliente").
+    Con esto web y app pintan igual el mismo archivo, que era el problema del video en móvil.
+  - **Huérfanos de S3 resueltos por evento** (hueco abierto desde la Fase 1). `folders` emite
+    `folder.deleted` (`{ userId, folderIds }`) con el subárbol recogido **antes** de borrar, y
+    `files` lo escucha (`files-cleanup.listener.ts`) para barrer S3 **por prefijo** con el nuevo
+    `StorageService.deleteByPrefix` (lista y borra por páginas de 1000). Va por evento porque la
+    llamada directa sería circular (`files` ya importa a `folders`), y por prefijo porque cuando
+    el listener corre las filas ya no existen. Un fallo de S3 se registra y no se propaga: la
+    carpeta ya se borró. `folder.deleted` quedó anotado en `ARCHITECTURE.md` con su porqué.
+  - **Borrado bloqueado confirmado** por el dueño: un archivo publicado no se borra (`409`), y
+    tampoco la carpeta que lo contiene. Sin cambios de código; la decisión quedó fechada en
+    `DATA-MODEL.md`.
+  - **Pruebas nuevas:** `files-cleanup.listener.spec.ts` (barrido por prefijo y tolerancia a
+    fallos de S3), emisión de `folder.deleted` con el subárbol y **no** emisión cuando el
+    borrado se bloquea, dimensiones en `confirm`, y herencia + override en `posts`.
+  - **Verificación:** `npm run lint`, `npm run build` y `npm test` (8 suites, **106 tests**).
+- **Falta:**
+  - Que los clientes manden las dimensiones en el `confirm` (tarea siguiente en web y app) y que
+    dejen de medirlas al publicar. Los archivos ya subidos quedan con `null` — se ven cuadrados
+    en masonry hasta que se vuelvan a subir; no hay backfill posible sin leer los binarios.
+  - Sin base de datos ni S3 en este entorno: la limpieza por prefijo está verificada con mocks,
+    no contra MinIO real. Es lo primero que hay que probar cuando haya entorno
+    (`docker compose up -d` + borrar una carpeta con archivos).
+- **Necesito:** nada bloqueante. El dueño pidió edición de publicaciones **solo de descripción y
+  etiquetas** en los clientes: el back ya lo soporta con `PATCH /api/posts/:id` (acepta también
+  `media`, que los clientes simplemente no van a mandar).
+- **Sigue:** los clientes (web y app): medir al subir, heredar dimensiones al publicar y la
+  edición ligera. Después, Fase 3 del `ROADMAP.md`.
+
 ### 2026-09-01 — Fase 2: publicaciones y feed propio (cierre de fase)
 - **Listo:**
   - **Módulo `posts`** (`src/posts/`, con su `AGENTS.md`): `POST /api/posts`,
