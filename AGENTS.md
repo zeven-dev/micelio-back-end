@@ -83,14 +83,18 @@ sincronizadas.
 | `src/events` | Contratos de eventos de dominio (tipos + nombres, sin lógica) | [`src/events/AGENTS.md`](src/events/AGENTS.md) |
 | `src/folders` | CRUD de carpetas (proyectos) por usuario | [`src/folders/AGENTS.md`](src/folders/AGENTS.md) |
 | `src/files` | Subida/listado/borrado de archivos dentro de carpetas | [`src/files/AGENTS.md`](src/files/AGENTS.md) |
-| `src/posts` | Publicaciones, etiquetas y orden del feed propio | [`src/posts/AGENTS.md`](src/posts/AGENTS.md) |
+| `src/posts` | Publicaciones, etiquetas, feed propio y home feed | [`src/posts/AGENTS.md`](src/posts/AGENTS.md) |
+| `src/social` | Follows, favoritos y la regla de visibilidad | [`src/social/AGENTS.md`](src/social/AGENTS.md) |
 | `src/storage` | Abstracción de almacenamiento (interfaz + S3) | [`src/storage/AGENTS.md`](src/storage/AGENTS.md) |
 | `src/prisma` | Cliente Prisma como módulo global | [`src/prisma/AGENTS.md`](src/prisma/AGENTS.md) |
 | `src/common` | Filtros, interceptores, guards y decoradores transversales | [`src/common/AGENTS.md`](src/common/AGENTS.md) |
 | `src/config` | Configuración tipada y validación de entorno | [`src/config/AGENTS.md`](src/config/AGENTS.md) |
 
-Módulos futuros planificados (ver `docs/ROADMAP.md` y `docs/ARCHITECTURE.md`): `social`
-(follows/favoritos, visibilidad, likes, saves, comentarios; el home feed vive ahí),
+`social` se amplía en la Fase 4 con likes, guardados y comentarios. El **home feed** quedó en
+`posts` y no en `social` (desviación documentada en `ARCHITECTURE.md`: ponerlo en `social`
+habría hecho circular la dependencia con `posts`).
+
+Módulos futuros planificados (ver `docs/ROADMAP.md` y `docs/ARCHITECTURE.md`):
 `ranking` (afinidad y ranking personalizado, solo eventos), `chat` (WebSockets),
 `notifications` (**extraíble**), `market`, `search`, `groups` (profesores). `admin` se amplía
 en la Fase 11 (hoy solo tiene el endpoint de rol).

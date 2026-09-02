@@ -20,6 +20,56 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-02 — Fase 3: grafo social, privacidad y home feed (cierre de fase, back-end)
+- **Listo:**
+  - **Módulo `social`** (`src/social/`, con su `AGENTS.md`): `POST/DELETE/PATCH
+    /api/users/:username/follow`, `GET /api/me/following`, `GET /api/me/followers`. Seguir y
+    dejar de seguir son **idempotentes**; seguirse a uno mismo es `400`; marcar favorito sin
+    seguir, `404`. Emite `user.followed` **solo** al crear la arista (un reintento del cliente no
+    debe volver a notificar).
+  - **Entidad `Follow`** (`isFavorite`, único por par, cascade a `User`); migración
+    `20260902100000_add_follows`.
+  - **Regla de visibilidad única** en `SocialService.canView` / `canViewWithGraph`: el dueño, un
+    perfil público, o **follow mutuo**. La usan `users` (para abrir `bio`/`feedSettings`) y
+    `posts` (detalle, feed de perfil y home). Nadie más la reimplementa.
+  - **`UserPublic` con datos reales**: `followersCount`, `followingCount`, `viewerFollows` y
+    `followsViewer` los aporta el grafo en **una sola pasada agregada** por página de perfiles
+    (`getGraphInfoFor`), no cuatro consultas por usuario. Cierra la ambigüedad #3 de la Fase 0.
+  - **Home feed v1** — `GET /api/feed` (`PostsService.getHomeFeed`), con el algoritmo exacto del
+    contrato: stream S (seguidos visibles) con `rankAt = createdAt + 12 h` si el autor es
+    favorito, stream D (públicos no seguidos) con `rankAt = createdAt`, orden `rankAt` desc y
+    desempate `id` desc, **mezcla 4:1** (cada posición múltiplo de 5 sale de D; si un stream se
+    agota, el otro llena) y **cursor doble** `{ s, d }`. Determinista, sin aleatoriedad. Si un
+    stream no aporta en una página, su marca se conserva para no reiniciarlo.
+  - **Pruebas:** `social.service.spec.ts` (15 casos: idempotencia, 400/404, la regla de
+    visibilidad en sus dos variantes, agregación del grafo, listados y mutuos) y 8 casos nuevos
+    en `posts.service.spec.ts` que traducen la especificación del feed una por una (mezcla 4:1,
+    boost de favorito, privado sin/con mutuo, exclusiones del descubrimiento, reanudación por
+    cursor, página corta, cursor inválido).
+  - **Verificación:** `npm run lint`, `npm run build` y `npm test` (9 suites, **131 tests**).
+- **Decisiones de arquitectura (a revisar por el dueño; anotadas en `ARCHITECTURE.md`):**
+  1. **El home feed vive en `posts`, no en `social`**, aunque el `AGENTS.md` raíz decía lo
+     contrario: el home necesita leer publicaciones y `posts` necesita la regla de visibilidad,
+     así que ponerlo en `social` habría creado una dependencia circular entre dos dominios. Con
+     el feed en `posts`, las dependencias van en una sola dirección (`posts → social → users`).
+  2. **`users` y `social` se inyectan con `forwardRef`**: es un ciclo real del dominio (el perfil
+     muestra conteos del grafo; el grafo resuelve usernames y arma vistas de usuario). El cruce
+     sigue siendo por servicio público — ninguno toca las tablas del otro.
+- **Falta:**
+  - **Límite conocido del stream de descubrimiento:** `findPublicUserIds` trae **todos** los ids
+    de perfiles públicos para poder filtrar sin unir `posts` con `users` (regla 7). Sirve de
+    sobra hoy; a partir de unos miles de usuarios públicos habrá que denormalizar `isPublic` en
+    `Post` o materializar el stream. No se optimizó por adelantado.
+  - Likes, guardados y comentarios (Fase 4): `viewerHasLiked`, `viewerHasSaved`, `likeCount` y
+    `commentCount` siguen en `0`/`false` porque hoy ese **es** el valor real.
+  - Sin base de datos en este entorno: el feed está verificado con pruebas unitarias sobre mocks
+    (incluida la traducción literal del algoritmo), no contra Postgres. Un smoke test con datos
+    reales —dos usuarios, uno favorito, uno público ajeno— es lo primero cuando haya entorno.
+- **Necesito:** que el dueño revise las dos decisiones de arquitectura de arriba, en especial
+  dónde debe vivir el home feed a largo plazo.
+- **Sigue:** los clientes (web y app) con su Fase 3: seguir/favoritos, privacidad en la UI y el
+  home real consumiendo `GET /api/feed` con dedupe por `id`.
+
 ### 2026-09-02 — Decisiones del dueño sobre la Fase 2 (tarea)
 - **Listo:**
   - **Dimensiones en la biblioteca.** `FileAsset` gana `width`/`height` (`Int?`), migración

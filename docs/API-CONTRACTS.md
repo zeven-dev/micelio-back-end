@@ -279,6 +279,20 @@ dentro de otra carpeta.
   `{ "user": UserPublic, "isFavorite": bool, "since": ISO }` (en followers no hay
   `isFavorite`).
 
+Detalles de la implementación (2026-09-02), para que los clientes no tengan que descubrirlos:
+
+| Caso | Respuesta |
+| --- | --- |
+| Seguir a quien ya sigues | `200` con el estado actual — **idempotente**, no duplica ni vuelve a emitir `user.followed` |
+| Dejar de seguir a quien no sigues | `200 { "following": false }` — también idempotente |
+| Seguirte a ti mismo | `400` `No puedes seguirte a ti mismo` |
+| Username inexistente | `404` `Usuario no encontrado` |
+| Marcar favorito a quien no sigues | `404` `Solo puedes marcar como favorito a alguien que sigues` |
+
+Los cuatro campos sociales de `UserPublic` (`followersCount`, `followingCount`,
+`viewerFollows`, `followsViewer`) dejan de ser `0`/`false` desde esta fase, y la vista extendida
+de un perfil privado (con `bio` y `feedSettings`) se abre con **follow mutuo**.
+
 ### Búsqueda — `GET /api/search?q=&type=&category=&cursor=&limit=`
 `type` ∈ {`users`,`posts`,`market`} (obligatorio, una a la vez — los clientes usan tabs).
 Respuesta: paginado estándar de `UserPublic` | `Post` | `MarketItem` según `type`.
@@ -291,6 +305,10 @@ Determinista, sin ML, sin aleatoriedad: **mismo viewer + mismo estado de afinida
 cursor ⇒ misma página**. Se implementa en dos versiones: **v1 en la Fase 3** (sin afinidad) y
 **v2 en la Fase 5** (con afinidad). La forma de la respuesta y el cursor son idénticos en
 ambas; los clientes no cambian.
+
+**v1 implementada el 2026-09-02** en `PostsService.getHomeFeed` (no en `social`: ver la nota de
+`ARCHITECTURE.md`). Respuesta: paginado estándar de `Post`. Si un stream no aporta nada en una
+página, su marca del cursor **se conserva** para no reiniciarlo en la siguiente.
 
 **Streams de candidatos** (siempre excluyen los posts del propio viewer y todo lo que no pase
 la regla de visibilidad de `social`):
@@ -389,3 +407,4 @@ Con `q` presente, después de filtrar por visibilidad:
 | 2026-08-31 | Etiquetas en Post; afinidad usuario→usuario y usuario→etiqueta con pesos y decaimiento; feed v2; `GET /api/explore`; orden de búsqueda | Decisión del dueño: ranking personalizado del home y la búsqueda |
 | 2026-09-01 | Fase 2: sección "Publicaciones — Fase 2" con el CRUD de `posts` y el listado por perfil (formas que el documento no fijaba); `width`/`height` de `Post.media` documentados como `number \| null` declarados por el cliente | Implementación de la Fase 2: el contrato definía la forma de `Post` pero no cómo se crea, edita, lista ni borra |
 | 2026-09-02 | `confirm` de biblioteca acepta `width`/`height` opcionales y `FileAsset` los devuelve; `Post.media` los hereda del archivo y el cliente puede pisarlos al publicar | Decisión del dueño: medir al subir para que web y app pinten igual, con override por si un cliente recorta el medio |
+| 2026-09-02 | Fase 3: detalles de respuesta de los follows (idempotencia, 400 al auto-seguirse, 404 del favorito) y nota de implementación del feed v1 | Cerrar huecos que los clientes tendrían que adivinar |

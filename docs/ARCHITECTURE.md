@@ -40,6 +40,19 @@ aislados, infraestructura intercambiable — se logra con las reglas de abajo.
 5. **Módulos extraíbles se marcan y se aíslan.** Un módulo diseñado para volverse microservicio
    (hoy: `notifications`) cumple reglas extra — ver siguiente sección.
 
+### Dos desviaciones documentadas de la Fase 3 (2026-09-02, a revisar por el dueño)
+
+1. **`GET /api/feed` vive en `posts`, no en `social`.** El home necesita leer publicaciones y
+   `posts` necesita la regla de visibilidad de `social`: ponerlo en `social` habría creado una
+   dependencia circular entre dos módulos de dominio. Con el feed en `posts` las dependencias
+   quedan en una sola dirección (`posts → social → users`). El resto de lo que anuncia
+   `AGENTS.md` para `social` (follows, favoritos, visibilidad y, más adelante, likes/guardados/
+   comentarios) sí vive ahí.
+2. **`users` y `social` se inyectan con `forwardRef`.** Es un ciclo real del dominio, no un
+   descuido: el perfil muestra conteos del grafo y el grafo resuelve usernames y arma vistas de
+   usuario. Se mantiene la regla de oro —el cruce es por **servicio público**, nunca por las
+   tablas del otro módulo—; `forwardRef` es solo cómo NestJS resuelve ese ciclo.
+
 ## `notifications`: módulo aislado y extraíble
 
 Decisión del dueño del producto: empieza dentro del monolito, pero organizado y documentado

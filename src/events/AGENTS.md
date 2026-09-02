@@ -10,13 +10,16 @@ lógica**. Ver `docs/ARCHITECTURE.md` ("Eventos de dominio como columna vertebra
 - `EventEmitterModule.forRoot()` se registra en `src/app.module.ts` (global); este módulo no
   tiene un `.module.ts` propio porque no expone providers, solo tipos.
 
-## Estado (Fase 2)
-- **Productores:** `posts` emite `post.created` (`{ postId, authorId, tags }`) al publicar y
-  `folders` emite `folder.deleted` (`{ userId, folderIds }`) al borrar una carpeta.
+## Estado (Fase 3)
+- **Productores:** `posts` emite `post.created` (`{ postId, authorId, tags }`) al publicar,
+  `social` emite `user.followed` (`{ followerId, followedId }`) al crear una arista nueva —solo
+  la primera vez, no en los reintentos— y `folders` emite `folder.deleted`
+  (`{ userId, folderIds }`) al borrar una carpeta.
 - **Consumidores:** `files` escucha `folder.deleted` para limpiar los binarios huérfanos de S3
-  (primer consumidor real del proyecto). `post.created` todavía no lo escucha nadie: `ranking`
-  (Fase 5) y `notifications` (Fase 7) son los que van a hacerlo, y que hoy no exista consumidor
-  es exactamente lo que esta arquitectura busca (el productor no sabe quién escucha).
+  (primer consumidor real del proyecto). `post.created` y `user.followed` todavía no los escucha
+  nadie: `ranking` (Fase 5) y `notifications` (Fase 7) son los que van a hacerlo, y que hoy no
+  exista consumidor es exactamente lo que esta arquitectura busca (el productor no sabe quién
+  escucha).
 - `folder.deleted` no venía en la lista de `ARCHITECTURE.md`: se agregó el 2026-09-02, con
   acuerdo del dueño, porque era la forma de que `files` limpiara S3 sin que `folders` conociera
   sus tablas (la llamada directa habría sido circular).

@@ -32,7 +32,7 @@ Cuenta de la aplicación e identidad social (Fase 0: registro con cédula/userna
 | feedGap | int @default(`2`) | Fase 2 — índice 0–5 de la escala de espaciado |
 | createdAt / updatedAt | datetime | |
 
-Relaciones: `1—N Folder`, `1—N Post`.
+Relaciones: `1—N Folder`, `1—N Post`, `1—N Follow` (como seguidor y como seguido).
 
 Migración: `20260831000000_extend_user_identity_roles`.
 
@@ -101,6 +101,26 @@ materia prima de las publicaciones. **Nunca** se usa para adjuntos de chat (eso 
 sonora y para el chat); se valida **solo por peso, nunca por duración** (decisión #11 de
 `PRODUCT.md`), con `UPLOAD_MAX_AUDIO_MB` (50 MB por defecto). El chat (Fase 6) decidirá si
 comparte el enum o define el suyo.
+
+### Follow (`follows`)
+Grafo social (Fase 3): A sigue a B, y opcionalmente lo marca como **favorito**.
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| id | uuid PK | |
+| followerId | FK → User | quien sigue; cascade delete |
+| followedId | FK → User | a quién sigue; cascade delete |
+| isFavorite | boolean @default(`false`) | marca de **quien sigue**: le da 12 h de prioridad en su home |
+| createdAt | datetime | el `since` de los listados |
+
+Único `(followerId, followedId)`: la arista existe o no existe, nunca duplicada — por eso
+seguir dos veces es idempotente. Índice extra por `followedId` porque las dos lecturas del
+grafo son opuestas (a quién sigue alguien / quién lo sigue).
+
+**Por qué no hay tabla de "follow mutuo":** el mutuo es una consulta (`count === 2`), no un
+dato. Materializarlo obligaría a mantener dos filas sincronizadas por relación.
+
+Migración: `20260902100000_add_follows`.
 
 ### Post (`posts`)
 Publicación del feed propio de un usuario: descripción, etiquetas y 1..N medios tomados de su
@@ -174,13 +194,10 @@ Ver la entidad `User` y el enum `Role` en "Entidades existentes" arriba.
 ### Fase 2 — Publicaciones y feed propio — **implementado**
 Ver `Post`, `PostMedia` y los ajustes de feed en "Entidades existentes" arriba.
 
-### Fase 3 — Grafo social y privacidad
-- **Follow**: `id, followerId → User, followedId → User, isFavorite Boolean @default(false),
-  createdAt`, único (followerId, followedId). `isFavorite` = el seguidor marca a ese seguido
-  como favorito (prioridad en su home).
-- **Regla de visibilidad** (se aplica en servicios, no es tabla): perfil público → contenido
-  visible para todos; perfil privado → contenido visible solo con **follow mutuo** (A sigue a B
-  y B sigue a A). Toda consulta de posts/perfil/búsqueda debe pasar por esta regla.
+### Fase 3 — Grafo social y privacidad — **implementado**
+Ver `Follow` en "Entidades existentes". La **regla de visibilidad** no es una tabla: vive en
+`SocialService` (`canView` / `canViewWithGraph`) y es el único lugar donde se decide si X ve el
+contenido de Y (propio, público, o follow mutuo).
 
 ### Fase 4 — Interacciones sociales
 - **Like**: `id, postId, userId, createdAt` con único (postId, userId). El dueño del post ve el
@@ -254,3 +271,4 @@ Ver `Post`, `PostMedia` y los ajustes de feed en "Entidades existentes" arriba.
 | 2026-09-01 | Fase 1 implementada: `Folder` gana `parentId` (sub-carpetas, unicidad por hermanos + índice parcial para la raíz); `FileType` gana `AUDIO`; migración `20260901000000_add_subfolders_and_audio` | Cierre de la Fase 1 del `ROADMAP.md` |
 | 2026-09-01 | Fase 2 implementada: `Post` (tags con índice GIN, `position`), `PostMedia` (`Restrict` sobre `FileAsset`, `width`/`height` declarados por el cliente) y ajustes de feed en `User` (`feedLayout`/`feedColumns`/`feedGap`); migración `20260901120000_add_posts_and_feed_settings` | Cierre de la Fase 2 del `ROADMAP.md` |
 | 2026-09-02 | `FileAsset` gana `width`/`height` (opcionales, declaradas por el cliente al confirmar); las publicaciones las heredan y `PostMedia.width/height` queda como override; migración `20260902000000_add_file_asset_dimensions` | Decisión del dueño: medir al subir a la biblioteca para que web y app pinten igual el mismo archivo |
+| 2026-09-02 | Fase 3: `Follow` (con `isFavorite`, único por par y cascade a `User`); migración `20260902100000_add_follows` | Grafo social, favoritos y la regla de visibilidad por follow mutuo |

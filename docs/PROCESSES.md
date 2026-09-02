@@ -66,8 +66,8 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   `ARCHITECTURE.md` (`post.created`, `post.liked`, `post.unliked`, `post.saved`, `post.unsaved`,
   `post.shared`, `comment.created`, `message.sent`, `user.followed`).
 - **Notas:** desde la Fase 2 hay productores y un consumidor reales: `posts` emite
-  `post.created` (nadie lo escucha aún) y `folders` emite `folder.deleted`, que **sí** consume
-  `files` para limpiar S3. `folder.deleted` no estaba en la lista original de
+  `post.created`, `social` emite `user.followed` (Fase 3; nadie los escucha aún) y `folders`
+  emite `folder.deleted`, que **sí** consume `files` para limpiar S3. `folder.deleted` no estaba en la lista original de
   `ARCHITECTURE.md`: se agregó al resolver los huérfanos de S3 sin romper la frontera entre
   módulos. El resto sigue siendo scaffold — sus productores llegan con `social`/`chat`
   (Fases 3, 4 y 6).
@@ -87,9 +87,9 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   dueño o perfil público → `UserPublic` completo (con `bio`); en cualquier otro caso,
   `UserPublic` limitado (sin `bio`, sin `feedSettings`).
 - **Notas (desviaciones documentadas, ver `STATUS.md`):** `followersCount`, `followingCount`,
-  `viewerFollows`, `followsViewer` son siempre `0`/`false` hasta que exista `Follow` (Fase 3,
-  no hay follow mutuo todavía); `feedSettings` ya se devuelve desde la Fase 2 (ver "Ajustes de
-  presentación del feed"). `GET /api/users/:username` es
+  `viewerFollows`, `followsViewer` son **reales desde la Fase 3** (los aporta `social`), y la
+  vista extendida de un perfil privado se abre con follow mutuo; `feedSettings` se devuelve
+  desde la Fase 2 (ver "Ajustes de presentación del feed"). `GET /api/users/:username` es
   `@OptionalAuth()` desde la decisión #10 de `PRODUCT.md` (perfiles públicos navegables por
   link); el resto de la API sigue exigiendo sesión.
 
@@ -207,6 +207,42 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Notas:** decisión registrada en `docs/DATA-MODEL.md` y confirmada por el dueño el
   2026-09-02 (bloquear, no cascadear ni marcar). Los binarios huérfanos al borrar una carpeta ya
   no son un hueco: los limpia el listener de `folder.deleted` (arriba).
+
+### Grafo social: seguir, favoritos y visibilidad (Fase 3)
+- **Módulos:** `src/social` (+ `src/users` por su servicio público)
+- **Disparadores:** `POST/DELETE/PATCH /api/users/:username/follow`, `GET /api/me/following`,
+  `GET /api/me/followers`
+- **Pasos:** resuelve el username con `UsersService` → valida que no sea uno mismo (`400`) →
+  crea/borra/actualiza la arista `Follow`. Seguir es **idempotente** (si ya existe, devuelve el
+  estado y **no** reemite el evento); dejar de seguir a quien no sigues tampoco es error; marcar
+  favorito exige seguir antes (`404`). Al crear una arista nueva emite `user.followed`. Los
+  listados paginan por cursor `(createdAt, id)` y arman cada `UserPublic` con
+  `UsersService.getPublicViewsByIds`.
+- **Regla de visibilidad (única en el proyecto):** `SocialService.canView` /
+  `canViewWithGraph` — el dueño, un perfil público, o **follow mutuo**. La usan `users` (para
+  decidir si un perfil muestra `bio`/`feedSettings`) y `posts` (para `GET /api/posts/:id`, el
+  feed de un perfil y el home). Nadie más la reimplementa.
+- **Notas:** `social` y `users` se inyectan con `forwardRef` porque se necesitan mutuamente por
+  definición (el perfil muestra conteos del grafo; el grafo resuelve usernames y arma vistas de
+  usuario). El cruce sigue siendo por servicio público: ninguno consulta las tablas del otro.
+  Los cuatro campos sociales de `UserPublic` se calculan en **una** pasada agregada
+  (`getGraphInfoFor`), no con cuatro consultas por usuario.
+
+### Home feed v1 (Fase 3)
+- **Módulos:** `src/posts` (+ `src/social` y `src/users` por sus servicios públicos)
+- **Disparador:** `GET /api/feed?cursor=&limit=`
+- **Pasos:** pide al grafo los seguidos, los favoritos y los mutuos → filtra los seguidos
+  visibles (públicos + mutuos, regla de `social`) → arma dos streams: **S** (seguidos, con
+  `rankAt = createdAt + 12 h` si el autor es favorito) y **D** (perfiles públicos que no sigue,
+  `rankAt = createdAt`) → ordena cada uno por `rankAt` desc con desempate `id` desc → los mezcla
+  **4:1** (cada posición múltiplo de 5 sale de D; si un stream se agota, el otro llena) →
+  devuelve el paginado estándar con un **cursor doble** (`{ s, d }`), donde cada marca es la
+  última entrada consumida de ese stream.
+- **Notas:** algoritmo exacto en `docs/API-CONTRACTS.md`; es determinista y sin aleatoriedad.
+  Vive en `posts` y no en `social` para no crear una dependencia circular — ver
+  `docs/ARCHITECTURE.md`. El stream D pide a `users` la lista de ids públicos: **límite
+  conocido** documentado en `STATUS.md` (a partir de unos miles de usuarios públicos habrá que
+  denormalizar o materializar, porque `posts` no puede unir con la tabla `users`).
 
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`

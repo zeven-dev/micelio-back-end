@@ -64,15 +64,15 @@ la misma tarea.
   formas y validaciones exactas en `API-CONTRACTS.md`. *Por qué:* el dueño cura cómo se ve su
   feed y los visitantes lo ven igual.
 
-## Fase 3 — Grafo social y privacidad
-- [ ] **Módulo `social` — follows**: entidad `Follow` con `isFavorite`;
+## Fase 3 — Grafo social y privacidad — **cerrada 2026-09-02**
+- [x] **Módulo `social` — follows**: entidad `Follow` con `isFavorite`;
   `POST/DELETE /api/users/:username/follow`, `PATCH .../follow` (favorito on/off),
   `GET /api/me/following`, `GET /api/me/followers`. Emite `user.followed`.
-- [ ] **Regla de visibilidad**: helper único en `social` que responde "¿puede X ver el
+- [x] **Regla de visibilidad**: helper único en `social` que responde "¿puede X ver el
   contenido de Y?" (público, o follow mutuo si privado). **Toda** consulta de posts, perfil y
   búsqueda pasa por ahí. *Por qué:* privado por defecto es requisito central; centralizar evita
   fugas.
-- [ ] **Home feed v1**: `GET /api/feed` implementando **exactamente** la columna v1 del
+- [x] **Home feed v1**: `GET /api/feed` implementando **exactamente** la columna v1 del
   algoritmo en `API-CONTRACTS.md` (streams S y D, boost de 12 h a favoritos, mezcla 4:1,
   cursor doble). Sin afinidad todavía (llega en la Fase 5); nada de aleatoriedad.
 
