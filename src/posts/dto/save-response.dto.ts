@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { PostResponseDto } from '../../posts/dto/post-response.dto';
+import { PostResponseDto } from './post-response.dto';
 
 /** Estado resultante de guardar / quitar de guardados. */
 export class SaveStateDto {

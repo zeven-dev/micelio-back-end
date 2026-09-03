@@ -45,26 +45,28 @@ aislados, infraestructura intercambiable — se logra con las reglas de abajo.
 1. **`GET /api/feed` vive en `posts`, no en `social`** (Fase 3, 2026-09-02). El home necesita
    leer publicaciones y `posts` necesita la regla de visibilidad de `social`: ponerlo en `social`
    habría creado una dependencia circular entre dos módulos de dominio. El resto de lo que
-   anuncia `AGENTS.md` para `social` (follows, favoritos, visibilidad y, desde la Fase 4,
-   likes/guardados/comentarios) sí vive ahí. **Nota de la Fase 4 (abajo): la dirección única que
-   esta decisión buscaba ya no se sostiene** — `social` terminó necesitando `posts` de todas
-   formas, por una razón distinta (like/guardar/comentar necesitan el post, no el feed).
+   anuncia `AGENTS.md` para `social` (follows, favoritos, visibilidad) sí vive ahí. **Nota
+   histórica:** durante la Fase 4 (2026-09-03), like/guardar/comentar se implementaron en
+   `social` y necesitaban el post, así que la dirección única que esta decisión buscaba dejó de
+   sostenerse por un rato (`social` terminó dependiendo también de `posts`). El refactor del
+   mismo día (entrada 3, abajo) movió esa lógica a `posts` y la dirección única volvió a
+   sostenerse.
 2. **`users` y `social` se inyectan con `forwardRef`** (Fase 3). Es un ciclo real del dominio, no
    un descuido: el perfil muestra conteos del grafo y el grafo resuelve usernames y arma vistas
    de usuario. Se mantiene la regla de oro —el cruce es por **servicio público**, nunca por las
-   tablas del otro módulo—; `forwardRef` es solo cómo NestJS resuelve ese ciclo.
-3. **El ciclo se volvió de tres módulos: `users` ↔ `social` ↔ `posts`** (Fase 4, 2026-09-03).
-   Like/guardar/comentar viven en `social` (regla de `AGENTS.md`: "`social` crece con likes,
-   guardados y comentarios"), pero necesitan el post (autor, etiquetas, visibilidad) — `social`
-   pasa a depender también de `posts`, que ya dependía de `social` (grafo del home). Los tres
-   módulos van con `forwardRef`; sin envolver también el lado `posts → users` (que por sí solo no
-   es circular) NestJS no arrancaba, porque el orden de `import`/`require` metía a `users` en
-   medio del ciclo de todas formas. Sigue sin haber acceso cruzado a tablas ajenas — el cruce es
-   siempre por servicio público. **Pendiente de decidir con el dueño:** si un ciclo de tres
-   módulos es aceptable como arquitectura estable o si conviene replantear los límites de
-   `social`/`posts` en una fase futura (por ejemplo, moviendo like/guardar/comentar a `posts`,
-   donde ya vive el resto del contenido) — no se decidió aquí, solo se resolvió lo mínimo para
-   que la Fase 4 arrancara sin romper la regla de servicios públicos.
+   tablas del otro módulo—; `forwardRef` es solo cómo NestJS resuelve ese ciclo. Sigue siendo el
+   único ciclo real que queda en el proyecto tras la entrada 3.
+3. **El ciclo de tres módulos (`users` ↔ `social` ↔ `posts`) de la Fase 4 se deshizo el mismo
+   día** (2026-09-03). La entrada anterior de este documento dejó pendiente decidirlo con el
+   dueño; la decisión fue mover like/guardar/comentar de `social` a `posts` (donde ya vive el
+   resto del contenido), en vez de aceptar el ciclo de tres como arquitectura estable. Detalle
+   completo del refactor en `docs/PROCESSES.md` ("Ciclo `posts` ↔ `social`"); en corto: `social`
+   ya no importa `PostsModule` en absoluto, así que el borde `posts → social` (grafo del home)
+   volvió a ser de una sola dirección, sin `forwardRef`, y el `forwardRef` que `posts` tenía
+   sobre `UsersModule` desde la Fase 4 (necesario solo por compartir camino de carga con el ciclo
+   de tres) tampoco hizo falta más — se confirmó arrancando el `AppModule` real
+   (`npm run api:export`) sin él. El único ciclo real que queda es el de la entrada 2
+   (`users` ↔ `social`), sin cambios.
 
 ## `notifications`: módulo aislado y extraíble
 

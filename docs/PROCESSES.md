@@ -263,33 +263,35 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   conocido** documentado en `STATUS.md` (a partir de unos miles de usuarios públicos habrá que
   denormalizar o materializar, porque `posts` no puede unir con la tabla `users`).
 
-### Likes y guardados (Fase 4)
-- **Módulos:** `src/social` (+ `src/posts` y `src/users` por sus servicios públicos)
+### Likes y guardados (Fase 4; movido de `social` a `posts` el 2026-09-03 — ver más abajo)
+- **Módulos:** `src/posts` (`PostInteractionsService`/`PostInteractionsController` para like/
+  save; `PostsService`/`PostsController` para `listSaved`/`GET /api/me/saved`) + `src/users` por
+  su servicio público
 - **Disparadores:** `POST/DELETE /api/posts/:id/like`, `GET /api/posts/:id/likes`,
   `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved`
-- **Pasos:** pide el post a `PostsService.getPostRef` (`404` si no existe) → valida visibilidad
-  con `UsersService.canViewContentOf` (`403` si no, misma regla que `GET /api/posts/:id`) →
-  crea/borra la fila `Like`/`SavedPost`. **Idempotente** igual que `follow`: dar like o guardar
-  dos veces no duplica la fila (único `(postId, userId)`) ni vuelve a emitir el evento; quitar
-  algo que no existía tampoco es error y tampoco emite. Al crear, emite `post.liked`/
-  `post.saved`; al borrar una fila que sí existía, `post.unliked`/`post.unsaved` — los cuatro
-  eventos llevan `{ postId, postAuthorId, userId, tags }` (las etiquetas del post, para la
-  afinidad por temas de la Fase 5). `GET /api/posts/:id/likes` es **solo del autor** (`403`
-  para cualquier otro viewer, sin pasar por la regla de visibilidad general) y devuelve además
-  `total`. `GET /api/me/saved` trae el `Post` completo embebido — lo arma
-  `PostsService.findManyByIdsForViewer`, porque `social` no sabe construir la forma de `Post`
-  (regla 7).
-- **Contador agregado para `posts`:** `SocialService.getInteractionInfoFor(postIds, viewerId)`
-  arma `viewerHasLiked/viewerHasSaved/likeCount/commentCount` de una página completa en una sola
-  pasada (cuatro consultas agregadas, no cuatro por post) — mismo criterio que
-  `getGraphInfoFor`. `PostsService.buildPostView` la consume así en vez de los `0`/`false` fijos
-  que traía desde la Fase 2.
+- **Pasos:** pide el post directo con Prisma (propio dominio desde el refactor; `404` si no
+  existe) → valida visibilidad con `UsersService.canViewContentOf` (`403` si no, misma regla que
+  `GET /api/posts/:id`) → crea/borra la fila `Like`/`SavedPost`. **Idempotente** igual que
+  `follow`: dar like o guardar dos veces no duplica la fila (único `(postId, userId)`) ni vuelve
+  a emitir el evento; quitar algo que no existía tampoco es error y tampoco emite. Al crear,
+  emite `post.liked`/`post.saved`; al borrar una fila que sí existía, `post.unliked`/
+  `post.unsaved` — los cuatro eventos llevan `{ postId, postAuthorId, userId, tags }` (las
+  etiquetas del post, para la afinidad por temas de la Fase 5). `GET /api/posts/:id/likes` es
+  **solo del autor** (`403` para cualquier otro viewer, sin pasar por la regla de visibilidad
+  general) y devuelve además `total`. `GET /api/me/saved` trae el `Post` completo embebido — lo
+  arma `PostsService.findManyByIdsForViewer` (mismo método de siempre, ya no cruza módulos).
+- **Contador agregado para `posts`:** `PostInteractionsService.getInteractionInfoFor(postIds,
+  viewerId)` arma `viewerHasLiked/viewerHasSaved/likeCount/commentCount` de una página completa
+  en una sola pasada (cuatro consultas agregadas, no cuatro por post) — mismo criterio que
+  `UsersService.getPublicViewsByIds`. `PostsService.toResponseList` la consume como una llamada
+  interna del mismo módulo (antes cruzaba a `social`).
 - **Notas:** `commentCount` cuenta **todos** los comentarios del post (raíces + respuestas), no
-  solo los raíz. Ver "Ciclo `posts` ↔ `social`" abajo para cómo se resolvió que `social`
-  necesitara datos de `posts`.
+  solo los raíz. El proceso "Ciclo `posts` ↔ `social`" que documentaba por qué esto vivía en
+  `social` se movió a "Procesos eliminados": el refactor del 2026-09-03 lo dejó sin objeto.
 
-### Comentarios anidados (Fase 4)
-- **Módulos:** `src/social` (+ `src/posts` y `src/users` por sus servicios públicos)
+### Comentarios anidados (Fase 4; movido de `social` a `posts` el 2026-09-03)
+- **Módulos:** `src/posts` (`PostInteractionsService`/`PostInteractionsController`) + `src/users`
+  por su servicio público
 - **Disparadores:** `POST /api/posts/:id/comments`, `GET /api/posts/:id/comments`,
   `GET /api/comments/:id/replies`, `PATCH /api/comments/:id`, `DELETE /api/comments/:id`
 - **Pasos (crear):** valida visibilidad del post (`403`/`404`, igual que arriba) → si viene
@@ -311,38 +313,9 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   mano ni las recorre. Sin evento propio de edición/borrado; solo `comment.created` alimenta
   afinidad (Fase 5).
 - **Notas:** `body` tope en 1000 caracteres (`MAX_COMMENT_LENGTH`,
-  `src/social/dto/create-comment.dto.ts`) — `API-CONTRACTS.md` solo pedía un límite "razonable"
+  `src/posts/dto/create-comment.dto.ts`) — `API-CONTRACTS.md` solo pedía un límite "razonable"
   y no fijaba el número; se eligió bastante menor al de la descripción de un post (2200) porque
   un comentario es una respuesta corta, no una pieza de contenido.
-
-### Ciclo `posts` ↔ `social` (Fase 4, ampliación del ciclo `users` ↔ `social`)
-- **Módulos:** `src/posts`, `src/social`
-- **Qué:** like/guardado/comentario viven en `social` (regla 7: el cruce de dominios es por
-  servicio público, y estas tablas son de `social`) pero necesitan el post — su autor para la
-  regla de visibilidad y el `postAuthorId` de los eventos, sus etiquetas para el payload de
-  `post.liked`/`post.saved`. `social` los pide a un método público nuevo,
-  `PostsService.getPostRef(id)` (`{ id, authorId, tags } | null`, nunca el `Post` completo). Al
-  revés, `GET /api/me/saved` necesita el `Post` completo embebido, que solo `posts` sabe armar:
-  `PostsService.findManyByIdsForViewer(ids, viewerId)`. Como `posts` ya dependía de `social`
-  (grafo del home, visibilidad), esto cierra un ciclo real de módulos —igual que `users` ↔
-  `social` desde la Fase 3— y se resuelve con el mismo mecanismo: `forwardRef()` en los
-  `imports` de `PostsModule`/`SocialModule` y en los `@Inject()` de los servicios.
-- **Nota de implementación importante:** en este ciclo de tres (`users` ↔ `social` ↔ `posts`),
-  `forwardRef` en el `@Module({ imports })` de cada punta **no basta por sí solo**. NestJS
-  compila a CommonJS y evalúa el arreglo `imports` de forma síncrona con el `require()` en curso
-  en ese momento; con tres módulos enlazándose entre sí, el orden real de carga (que decide
-  `AppModule` según el orden de sus propios `import`) puede hacer que `PostsModule` intente leer
-  `UsersModule` **antes** de que el archivo de `users.module.ts` termine de ejecutarse — aunque
-  `posts` → `users` no sea circular por sí solo. Sin `forwardRef(() => UsersModule)` también ahí
-  (y sin `@Inject(forwardRef(() => UsersService))` en el constructor de `PostsService`), el
-  arranque fallaba con *"The module at index [0] of the PostsModule imports array is
-  undefined"* o, ya resuelto eso, con el parámetro de `UsersService` sin poder resolverse
-  (`Nest can't resolve dependencies... argument dependency at index [1]`) — **según qué módulo
-  cargara primero** `AppModule`, no de forma determinista al leer el código. La lección: en un
-  ciclo de tres o más módulos, todo enlace que comparta camino de carga con el ciclo necesita
-  `forwardRef`, no solo los dos que se necesitan "directamente". Verificado con
-  `npm run api:export` (bootea `AppModule` completo) además de los tests unitarios, que mockean
-  los servicios y no habrían detectado esto.
 
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`
@@ -367,3 +340,43 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Motivo:** se registraba **después** de `app.listen()` y nunca llegó a responder (devolvía
   `404`, verificado). El health check real es `GET /api/health` en `AppController`, marcado
   `@Public()`. Se eliminó para no anunciar un endpoint inexistente a un balanceador.
+
+### Ciclo `posts` ↔ `social` de tres módulos (Fase 4, deshecho el 2026-09-03)
+- **Vivía en:** `src/posts`, `src/social` (`@Module({ imports: [forwardRef(...)] })` en ambos +
+  `@Inject(forwardRef(...))` en `PostsService`/`SocialService`, y también el borde
+  `posts → users`, ver la nota de implementación abajo).
+- **Qué era:** durante la Fase 4, like/guardado/comentario se implementaron en `social` (por
+  instrucción de su `AGENTS.md` de entonces) pero necesitaban el post — su autor para la regla
+  de visibilidad y el `postAuthorId` de los eventos, sus etiquetas para el payload de
+  `post.liked`/`post.saved`. `social` los pedía a un método público de `posts`,
+  `PostsService.getPostRef(id)` (`{ id, authorId, tags } | null`). Al revés, `GET /api/me/saved`
+  necesitaba el `Post` completo embebido, que solo `posts` sabe armar
+  (`PostsService.findManyByIdsForViewer`). Como `posts` ya dependía de `social` (grafo del home,
+  visibilidad), esto cerraba un ciclo real de **tres** módulos con `users` ↔ `social` (Fase 3):
+  `users` ↔ `social` ↔ `posts`, resuelto con `forwardRef()` en las tres puntas.
+- **Nota de implementación que se conserva por su valor:** en ese ciclo de tres, `forwardRef` en
+  el `@Module({ imports })` de cada punta **no bastaba por sí solo**. NestJS compila a CommonJS y
+  evalúa el arreglo `imports` de forma síncrona con el `require()` en curso en ese momento; con
+  tres módulos enlazándose entre sí, el orden real de carga (que decide `AppModule` según el
+  orden de sus propios `import`) podía hacer que `PostsModule` intentara leer `UsersModule`
+  **antes** de que el archivo de `users.module.ts` terminara de ejecutarse — aunque
+  `posts` → `users` no fuera circular por sí solo. Sin `forwardRef(() => UsersModule)` también
+  ahí (y sin `@Inject(forwardRef(() => UsersService))` en el constructor de `PostsService`), el
+  arranque fallaba con *"The module at index [0] of the PostsModule imports array is
+  undefined"* o, ya resuelto eso, con el parámetro de `UsersService` sin poder resolverse
+  (`Nest can't resolve dependencies... argument dependency at index [1]`) — **según qué módulo
+  cargara primero** `AppModule`, no de forma determinista al leer el código. La lección, válida
+  para cualquier ciclo futuro de tres o más módulos: todo enlace que comparta camino de carga con
+  el ciclo necesita `forwardRef`, no solo los dos que se necesitan "directamente".
+- **Por qué se eliminó:** el dueño del producto decidió no aceptar el ciclo de tres como
+  arquitectura estable y en su lugar deshacerlo devolviendo like/guardar/comentar a `posts`
+  (donde ya vive el resto del contenido — publicaciones, medios). Con la lógica movida:
+  `social` dejó de importar `PostsModule` en absoluto (nada de lo que quedó ahí usa
+  `PostsService`), así que el borde `posts → social` (grafo del home: `getFollowedIds`/
+  `getFavoriteIds`/`getMutualIds`) volvió a ser de una sola dirección, sin `forwardRef`. El
+  `forwardRef` de `posts → users` tampoco hizo falta más — se confirmó (no se asumió) arrancando
+  el `AppModule` real con `npm run api:export` sin él. El único ciclo que queda en el proyecto es
+  `users` ↔ `social` (Fase 3, ver `docs/ARCHITECTURE.md`), independiente de este y sin cambios.
+  El código resultante: `PostInteractionsService`/`PostInteractionsController` en
+  `src/posts/post-interactions.{service,controller}.ts`, documentados en los procesos "Likes y
+  guardados" y "Comentarios anidados" arriba.

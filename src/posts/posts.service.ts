@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  forwardRef,
   ForbiddenException,
   Inject,
   Injectable,
@@ -18,31 +17,22 @@ import { decodeCursor, encodeCursor } from '../common/pagination/cursor.util';
 import { DOMAIN_EVENTS, PostCreatedEvent } from '../events/domain-events';
 import { FilesService, LibraryAssetRef } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SocialService } from '../social/social.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
 import { CreatePostDto, PostMediaInputDto } from './dto/create-post.dto';
 import { PostMediaResponseDto, PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
+import { SavedPostItemDto } from './dto/save-response.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import {
   EMPTY_POST_INTERACTION,
   PostInteractionInfo,
-  SocialService,
-} from '../social/social.service';
+  PostInteractionsService,
+} from './post-interactions.service';
 import { UserPublicView, UsersService } from '../users/users.service';
 import { buildTags } from './utils/tags.util';
 
 type PostWithMedia = Post & { media: PostMedia[] };
-
-/**
- * Lo mínimo que `social` necesita de un post para validar visibilidad y armar los eventos de
- * interacción (like/save/comment): id, autor y etiquetas. No expone el resto de la forma de
- * `Post` — esa sigue siendo de este módulo (regla 7 de `AGENTS.md`).
- */
-export interface PostRef {
-  id: string;
-  authorId: string;
-  tags: string[];
-}
 
 /** Un candidato del home con su clave de orden ya calculada para este viewer. */
 interface RankedPost {
@@ -93,19 +83,29 @@ function isFeedCursor(value: unknown): value is FeedCursor {
   return typeof cursor?.p === 'number' && typeof cursor?.id === 'string';
 }
 
+/** Marca del cursor de `GET /api/me/saved`: última fecha e id consumidos. */
+interface SavedCursor {
+  c: string;
+  id: string;
+}
+
+function isSavedCursor(value: unknown): value is SavedCursor {
+  const cursor = value as SavedCursor | null;
+  return typeof cursor?.c === 'string' && typeof cursor?.id === 'string';
+}
+
 @Injectable()
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
-    // `forwardRef` también aquí: aunque `posts` → `users` no es circular por sí solo, el orden
-    // real de `require()` los mete en el mismo ciclo que `social` (ver la nota en
-    // `PostsModule`), y sin esto Nest resuelve este parámetro como `undefined` en tiempo de
-    // arranque según qué módulo cargue primero `AppModule`.
-    @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
-    // `social` necesita `PostsService.getPostRef`/`findManyByIdsForViewer` para like/save/
-    // comment (visibilidad + eventos), así que el ciclo con `posts` es real, no un descuido —
-    // mismo criterio que `users` ↔ `social` (ver `SocialService`). `forwardRef` en ambos lados.
-    @Inject(forwardRef(() => SocialService)) private readonly socialService: SocialService,
+    private readonly usersService: UsersService,
+    // Grafo del home (seguidos, favoritos, mutuos): dependencia de una sola dirección desde el
+    // refactor que deshizo el ciclo de tres módulos de la Fase 4 — `social` ya no depende de
+    // `posts` en absoluto, así que este borde no necesita `forwardRef`.
+    private readonly socialService: SocialService,
+    // Likes, guardados y comentarios de un post: mismo módulo, sin ciclo (`PostInteractionsService`
+    // no depende de `PostsService`).
+    private readonly postInteractions: PostInteractionsService,
     private readonly filesService: FilesService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
@@ -387,23 +387,53 @@ export class PostsService {
     }));
   }
 
-  /**
-   * Lo que `social` necesita de un post para like/save/comment: existencia, autor (para la
-   * regla de visibilidad y el `postAuthorId` de los eventos) y etiquetas (para el payload de
-   * `post.liked`/`post.saved`, que alimentan la afinidad por temas en la Fase 5). `null` si no
-   * existe — `social` decide ahí si eso es `404`.
-   */
-  async getPostRef(id: string): Promise<PostRef | null> {
-    return this.prisma.post.findUnique({
-      where: { id },
-      select: { id: true, authorId: true, tags: true },
+  /** Guardados del usuario, más recientes primero, con el `Post` completo embebido. */
+  async listSaved(
+    userId: string,
+    query: CursorPaginationDto,
+  ): Promise<CursorPage<SavedPostItemDto>> {
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+    const cursor = query.cursor ? decodeCursor(query.cursor, isSavedCursor) : null;
+    const rows = await this.prisma.savedPost.findMany({
+      where: {
+        userId,
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { lt: new Date(cursor.c) } },
+                { createdAt: new Date(cursor.c), id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
     });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
+    // El `Post` completo (medios firmados, contadores…) se arma con `findManyByIdsForViewer`:
+    // la fila de `saved_posts` solo tiene el `postId`.
+    const posts = await this.findManyByIdsForViewer(
+      page.map((row) => row.postId),
+      userId,
+    );
+
+    return {
+      items: page.flatMap((row): SavedPostItemDto[] => {
+        const post = posts.get(row.postId);
+        return post ? [{ post, savedAt: row.createdAt }] : [];
+      }),
+      nextCursor:
+        hasMore && last ? encodeCursor({ c: last.createdAt.toISOString(), id: last.id }) : null,
+    };
   }
 
   /**
-   * Varios posts por id, ya armados como `PostResponseDto` para este viewer. Lo usa `social`
-   * para `GET /api/me/saved`: la fila de guardado solo tiene el `postId`, y este módulo es el
-   * único que sabe construir la forma completa de `Post` (regla 7).
+   * Varios posts por id, ya armados como `PostResponseDto` para este viewer. La usa `listSaved`:
+   * la fila de guardado solo tiene el `postId`, y este método es el que sabe construir la forma
+   * completa de `Post` (medios firmados, contadores…).
    */
   async findManyByIdsForViewer(
     ids: string[],
@@ -462,9 +492,9 @@ export class PostsService {
         posts.map((post) => post.authorId),
         viewerId,
       ),
-      // Likes, guardados y comentarios (Fase 4) vienen de `social` en una sola pasada agregada
-      // para toda la página, no consulta por consulta — mismo criterio que `getGraphInfoFor`.
-      this.socialService.getInteractionInfoFor(
+      // Likes, guardados y comentarios en una sola pasada agregada para toda la página, no
+      // consulta por consulta — mismo criterio que `UsersService.getPublicViewsByIds`.
+      this.postInteractions.getInteractionInfoFor(
         posts.map((post) => post.id),
         viewerId,
       ),

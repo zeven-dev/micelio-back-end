@@ -1,32 +1,26 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { FilesModule } from '../files/files.module';
 import { SocialModule } from '../social/social.module';
 import { StorageModule } from '../storage/storage.module';
 import { UsersModule } from '../users/users.module';
+import { PostInteractionsController } from './post-interactions.controller';
+import { PostInteractionsService } from './post-interactions.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 
 // Cruce de dominios solo por servicios públicos (regla 7 de `AGENTS.md`): `UsersService` para
-// el autor y la visibilidad, `SocialService` para el grafo (seguidos y favoritos del home, y
-// desde la Fase 4 likes/guardados/comentarios) y `FilesService` para los archivos de la
-// biblioteca. `posts` no consulta `users`, `follows`, `folders`, `file_assets`, `likes`,
-// `saved_posts` ni `comments` con Prisma.
-// `social` también necesita `PostsService` (like/save/comment viven ahí, y necesitan el post) —
-// es un ciclo real del dominio, como `users` ↔ `social`: `forwardRef` en ambos módulos.
-// `UsersModule` también va envuelto aquí: aunque `posts` → `users` no es circular por sí solo,
-// ahora comparte camino de carga con el ciclo `posts` ↔ `social` ↔ `users` (CommonJS resuelve
-// los `require()` en el orden de los `import`, y ese orden mete a `users.module.ts` en medio
-// del ciclo) — sin `forwardRef` aquí, Nest arranca con `UsersModule` en `undefined` según el
-// orden en que `AppModule` cargue los módulos.
+// el autor y la visibilidad, `SocialService` para el grafo del home (seguidos y favoritos) y
+// `FilesService` para los archivos de la biblioteca. `posts` no consulta `users`, `follows`,
+// `folders` ni `file_assets` con Prisma.
+// Likes, guardados y comentarios (Fase 4) volvieron a vivir aquí (antes en `social`) al
+// deshacer el ciclo de tres módulos que generaban: `social` ya no depende de `posts`, así que
+// este módulo importa `SocialModule` y `UsersModule` en una sola dirección, sin `forwardRef`
+// (confirmado arrancando el `AppModule` real con `npm run api:export`). El ciclo real que queda
+// en el proyecto es `users` ↔ `social`, independiente de este módulo — ver `docs/ARCHITECTURE.md`.
 @Module({
-  imports: [
-    forwardRef(() => UsersModule),
-    forwardRef(() => SocialModule),
-    FilesModule,
-    StorageModule,
-  ],
-  controllers: [PostsController],
-  providers: [PostsService],
-  exports: [PostsService],
+  imports: [UsersModule, SocialModule, FilesModule, StorageModule],
+  controllers: [PostsController, PostInteractionsController],
+  providers: [PostsService, PostInteractionsService],
+  exports: [PostsService, PostInteractionsService],
 })
 export class PostsModule {}

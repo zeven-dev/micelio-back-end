@@ -95,9 +95,11 @@ sincronizadas.
 | `src/common` | Filtros, interceptores, guards y decoradores transversales | [`src/common/AGENTS.md`](src/common/AGENTS.md) |
 | `src/config` | Configuración tipada y validación de entorno | [`src/config/AGENTS.md`](src/config/AGENTS.md) |
 
-`social` se amplía en la Fase 4 con likes, guardados y comentarios. El **home feed** quedó en
-`posts` y no en `social` (desviación documentada en `ARCHITECTURE.md`: ponerlo en `social`
-habría hecho circular la dependencia con `posts`).
+Likes, guardados y comentarios (Fase 4) viven en `posts`, no en `social`: se implementaron en
+`social` durante la Fase 4 y se movieron a `posts` en un refactor posterior para deshacer el
+ciclo de tres módulos que generaban (ver `ARCHITECTURE.md` y `src/posts/AGENTS.md`). El **home
+feed** también quedó en `posts` y no en `social` (desviación documentada en `ARCHITECTURE.md`:
+ponerlo en `social` habría hecho circular la dependencia con `posts`).
 
 Módulos futuros planificados (ver `docs/ROADMAP.md` y `docs/ARCHITECTURE.md`):
 `ranking` (afinidad y ranking personalizado, solo eventos), `chat` (WebSockets),

@@ -18,6 +18,24 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ---
 
+### 2026-09-03 — Deshacer el ciclo de tres módulos (tarea, refactor puro)
+- **Listo:** like/guardar/comentar movidos de `social` a `posts`
+  (`src/posts/post-interactions.{service,controller}.ts` nuevos, DTOs movidos a `src/posts/dto/`).
+  `social` ya no importa `PostsModule`; ninguno de los dos necesita `forwardRef` en ese borde —
+  confirmado arrancando el `AppModule` real. El único ciclo que queda es `users`↔`social`
+  (Fase 3, sin cambios). **Cero cambio de contrato HTTP**: verificado por el propio hijo con un
+  diff estructural del `openapi.json` (ignorando `tags`/`operationId`, que sí cambian porque el
+  handler ahora vive en otro controlador) y, de forma independiente por mí, comparando
+  `paths`/`components.schemas` byte a byte antes/después — idénticos. 154 tests (mismos de
+  antes, migrados sin agregar cobertura nueva), lint/build en verde.
+- **Necesito:** nada bloqueante. `docs/ARCHITECTURE.md` y `docs/PROCESSES.md` quedaron
+  actualizados contando qué pasó (la entrada anterior de `ARCHITECTURE.md` que decía "pendiente
+  de decidir con el dueño" ahora cuenta la decisión y el resultado, sin borrar el historial).
+- **Falta:** nada de esta tarea.
+- **Sigue:** Fase 5 del `ROADMAP.md` (afinidad y ranking, módulo `ranking`) — con la deuda
+  técnica de Fase 4 despejada (DTOs completos, tokens unificados, ciclo deshecho), no hay nada
+  pendiente entre repos antes de arrancarla.
+
 ### 2026-09-03 — Completar DTOs de respuesta faltantes (tarea, deuda técnica)
 - **Listo:** `docs/openapi.json` ya cubre las 8 rutas que faltaban: `folders` completo
   (`FolderResponseDto`/`FolderDetailResponseDto`/`FolderCountDto`/`FolderPathItemDto`), `GET

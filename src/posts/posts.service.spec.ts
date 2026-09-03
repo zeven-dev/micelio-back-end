@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SocialService } from '../social/social.service';
 import { StorageService } from '../storage/storage.service';
 import { UserPublicView, UsersService } from '../users/users.service';
+import { PostInteractionsService } from './post-interactions.service';
 import { PostsService } from './posts.service';
 
 const AUTHOR_ID = 'author-1';
@@ -53,6 +54,7 @@ describe('PostsService', () => {
       delete: jest.Mock;
     };
     postMedia: { deleteMany: jest.Mock };
+    savedPost: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
   let users: {
@@ -66,8 +68,8 @@ describe('PostsService', () => {
     getFollowedIds: jest.Mock;
     getFavoriteIds: jest.Mock;
     getMutualIds: jest.Mock;
-    getInteractionInfoFor: jest.Mock;
   };
+  let interactions: { getInteractionInfoFor: jest.Mock };
   let files: { findOwnedByUser: jest.Mock; findManyByIds: jest.Mock };
   let storage: jest.Mocked<StorageService>;
   let events: { emit: jest.Mock };
@@ -83,6 +85,7 @@ describe('PostsService', () => {
         delete: jest.fn().mockResolvedValue(undefined),
       },
       postMedia: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      savedPost: { findMany: jest.fn().mockResolvedValue([]) },
       // Soporta las dos formas que usa el servicio: callback (crear/editar) y arreglo (reorder).
       $transaction: jest.fn(async (arg: unknown) =>
         typeof arg === 'function'
@@ -101,7 +104,9 @@ describe('PostsService', () => {
       getFollowedIds: jest.fn().mockResolvedValue([]),
       getFavoriteIds: jest.fn().mockResolvedValue([]),
       getMutualIds: jest.fn().mockResolvedValue([]),
-      // Fase 4: sin interacciones por defecto, igual que el valor vacío real de `social`.
+    };
+    interactions = {
+      // Sin interacciones por defecto, igual que el valor vacío real de `PostInteractionsService`.
       getInteractionInfoFor: jest.fn(
         async (postIds: string[]) =>
           new Map(
@@ -137,6 +142,7 @@ describe('PostsService', () => {
       prisma as unknown as PrismaService,
       users as unknown as UsersService,
       social as unknown as SocialService,
+      interactions as unknown as PostInteractionsService,
       files as unknown as FilesService,
       { get: jest.fn(() => 300) } as unknown as ConfigService,
       storage,
@@ -221,10 +227,10 @@ describe('PostsService', () => {
       expect(other).not.toHaveProperty('likeCount');
     });
 
-    // Fase 4: los contadores/flags sociales ya no son un valor fijo — vienen de `social`.
-    it('arma viewerHasLiked/viewerHasSaved/likeCount/commentCount con lo que aporta social', async () => {
+    // Los contadores/flags sociales no son un valor fijo — vienen de `PostInteractionsService`.
+    it('arma viewerHasLiked/viewerHasSaved/likeCount/commentCount con lo que aportan las interacciones', async () => {
       prisma.post.findUnique.mockResolvedValue(postRow());
-      social.getInteractionInfoFor.mockResolvedValue(
+      interactions.getInteractionInfoFor.mockResolvedValue(
         new Map([
           ['post-1', { viewerHasLiked: true, viewerHasSaved: true, likeCount: 5, commentCount: 2 }],
         ]),
@@ -236,7 +242,7 @@ describe('PostsService', () => {
       expect(post.viewerHasSaved).toBe(true);
       expect(post.likeCount).toBe(5);
       expect(post.commentCount).toBe(2);
-      expect(social.getInteractionInfoFor).toHaveBeenCalledWith(['post-1'], AUTHOR_ID);
+      expect(interactions.getInteractionInfoFor).toHaveBeenCalledWith(['post-1'], AUTHOR_ID);
     });
 
     it('firma la URL de cada medio y anuncia su vencimiento', async () => {
@@ -417,6 +423,7 @@ describe('PostsService', () => {
       expect(prisma.post.delete).toHaveBeenCalledWith({ where: { id: 'post-1' } });
     });
   });
+
   // El algoritmo del home está especificado al detalle en `docs/API-CONTRACTS.md`: estas
   // pruebas son la traducción literal de esa especificación.
   describe('home feed v1', () => {

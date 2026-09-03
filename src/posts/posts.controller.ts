@@ -21,6 +21,7 @@ import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
+import { SavedPostItemDto } from './dto/save-response.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
 
@@ -88,5 +89,11 @@ export class PostsController {
     @Query() query: CursorPaginationDto,
   ) {
     return this.postsService.findByUsername(username, user.id, query);
+  }
+
+  @Get('me/saved')
+  @ApiCursorPaginatedResponse(SavedPostItemDto)
+  saved(@CurrentUser() user: AuthenticatedUser, @Query() query: CursorPaginationDto) {
+    return this.postsService.listSaved(user.id, query);
   }
 }
