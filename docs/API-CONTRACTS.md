@@ -279,6 +279,35 @@ dentro de otra carpeta.
   `{ "total": 0, "items": [ { "user": UserPublic, "likedAt": ISO } ], "nextCursor": ... }`
   ordenado por `likedAt` desc.
 
+### Guardados — Fase 4
+- `POST /api/posts/:id/save` → `{ "saved": true }` (idempotente; repetir no duplica). Emite
+  `post.saved` **solo** al crear la fila (reintento del cliente no debe reafirmar afinidad dos
+  veces — mismo criterio que `user.followed`).
+- `DELETE /api/posts/:id/save` → `{ "saved": false }` (idempotente). Emite `post.unsaved` **solo**
+  si existía.
+- `GET /api/me/saved` → paginado estándar de `{ "post": Post, "savedAt": ISO }`, orden `savedAt`
+  desc.
+- `403` si el post no es visible para el viewer (misma regla que `GET /api/posts/:id`); `404` si
+  el post no existe.
+
+### Comentarios — Fase 4
+- `POST /api/posts/:id/comments` → body `{ "body": "string", "parentId"?: "uuid" }` → `Comment`.
+  Emite `comment.created`. Si `parentId` apunta a una respuesta (no a un comentario raíz), el
+  servidor lo cuelga del mismo raíz (usa el `parentId` del padre, no el de la respuesta) — la
+  profundidad nunca pasa de un nivel (decisión #12 de `PRODUCT.md`, ver forma de `Comment`
+  arriba).
+- `GET /api/posts/:id/comments` → paginado estándar de comentarios **raíz** (`parentId: null`)
+  del post, orden `createdAt` asc.
+- `GET /api/comments/:id/replies` → paginado estándar de las respuestas de un comentario raíz,
+  orden `createdAt` asc. `404` si `:id` no existe o no es un comentario raíz.
+- `PATCH /api/comments/:id` → body `{ "body": "string" }` → `Comment` actualizado. Solo el
+  autor; `403` si no lo es.
+- `DELETE /api/comments/:id` → `204`. Solo el autor del comentario. Si es raíz, la base borra
+  en cascada sus respuestas (`onDelete: Cascade` en `DATA-MODEL.md`, no hay que hacerlo a mano).
+  Sin evento propio — solo `comment.created` alimenta afinidad (Fase 5).
+- `403` en cualquiera de las anteriores si el post no es visible para el viewer (misma regla que
+  `GET /api/posts/:id`); `404` si el post no existe.
+
 ### Follows — Fase 3
 - `POST /api/users/:username/follow` → `{ "following": true, "isFavorite": false }`.
 - `DELETE /api/users/:username/follow` → `{ "following": false }`.

@@ -47,10 +47,13 @@ model User {
   feedColumns Int        @default(3)
   feedGap     Int        @default(2)
 
-  folders   Folder[]
-  posts     Post[]
-  following Follow[] @relation("Following")
-  followers Follow[] @relation("Followers")
+  folders    Folder[]
+  posts      Post[]
+  following  Follow[]    @relation("Following")
+  followers  Follow[]    @relation("Followers")
+  likes      Like[]
+  savedPosts SavedPost[]
+  comments   Comment[]
 
   @@map("users")
 }
@@ -127,8 +130,11 @@ model Post {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  author User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  media  PostMedia[]
+  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media    PostMedia[]
+  likes    Like[]
+  savedBy  SavedPost[]
+  comments Comment[]
 
   // El feed propio se lee siempre por autor y en el orden que él curó (`position` asc).
   @@index([authorId, position])
@@ -156,4 +162,62 @@ model PostMedia {
   @@index([postId, order])
   @@index([fileAssetId])
   @@map("post_media")
+}
+
+/// Fase 4: like de un usuario a un post. Único (postId, userId) — dar like dos veces es
+/// idempotente a nivel de servicio, y este índice es lo que lo garantiza a nivel de datos.
+model Like {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  // El dueño del post lista quién le dio like (`GET /api/posts/:id/likes`, orden `likedAt` desc).
+  @@index([postId, createdAt])
+  @@index([userId])
+  @@map("likes")
+}
+
+/// Fase 4: post guardado por un usuario en su colección privada. Único (postId, userId), mismo
+/// criterio de idempotencia que `Like`.
+model SavedPost {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  // `GET /api/me/saved` lista los guardados de un usuario, orden `savedAt` desc.
+  @@index([userId, createdAt])
+  @@map("saved_posts")
+}
+
+/// Fase 4: comentario de un post, anidado a **un solo nivel** (decisión #12 de `PRODUCT.md`).
+/// `parentId` apunta a otro `Comment` del mismo post: `null` = raíz, no-nulo = respuesta.
+/// Responder a una respuesta cuelga del mismo raíz (lo resuelve `SocialService`, no el schema).
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  authorId  String
+  body      String
+  parentId  String?
+  createdAt DateTime @default(now())
+
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  // Auto-relación: borrar un comentario raíz se lleva sus respuestas en cascada.
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+
+  // El listado de un post (raíces) y el de respuestas de un raíz son la misma forma de consulta:
+  // `postId` + `parentId` + orden `createdAt`. Un solo índice cubre ambas lecturas.
+  @@index([postId, parentId, createdAt])
+  @@map("comments")
 }

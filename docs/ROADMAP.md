@@ -77,12 +77,12 @@ la misma tarea.
   cursor doble). Sin afinidad todavía (llega en la Fase 5); nada de aleatoriedad.
 
 ## Fase 4 — Interacciones
-- [ ] **Likes**: `POST/DELETE /api/posts/:id/like` (idempotentes); `GET /api/posts/:id/likes`
+- [x] **Likes**: `POST/DELETE /api/posts/:id/like` (idempotentes); `GET /api/posts/:id/likes`
   **403 si no es el dueño** — contratos exactos en `API-CONTRACTS.md`. Emite `post.liked` /
   `post.unliked`.
-- [ ] **Guardados**: `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved`. Emite
+- [x] **Guardados**: `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved`. Emite
   `post.saved` / `post.unsaved`.
-- [ ] **Comentarios**: CRUD en `POST /api/posts/:id/comments`. Emite `comment.created`.
+- [x] **Comentarios**: CRUD en `POST /api/posts/:id/comments`. Emite `comment.created`.
   **Anidados desde el inicio** (decisión #12 de `PRODUCT.md`): `parentId` en `Comment`, un solo
   nivel de profundidad; formas exactas en `API-CONTRACTS.md`.
 

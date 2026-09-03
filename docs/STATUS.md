@@ -18,6 +18,52 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ---
 
+### 2026-09-03 — Fase 4: likes, guardados y comentarios (cierre de fase, back-end)
+- **Listo:**
+  - **`Like`, `SavedPost`, `Comment`** en `prisma/schema.prisma` exactos a `DATA-MODEL.md`;
+    migración `20260903002142_add_likes_saves_comments`.
+  - **Likes**: `POST/DELETE /api/posts/:id/like` (idempotentes, mismo criterio que `follow`:
+    reintento no reemite `post.liked`/`post.unliked`); `GET /api/posts/:id/likes` (`403` si el
+    viewer no es el autor).
+  - **Guardados**: `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved` (post completo +
+    `savedAt`). Mismo criterio de idempotencia.
+  - **Comentarios**: `POST/GET /api/posts/:id/comments`, `GET /api/comments/:id/replies`,
+    `PATCH/DELETE /api/comments/:id`. **Anidados desde el inicio** con un solo nivel real:
+    responder a una respuesta cuelga del mismo raíz (`parentId = parent.parentId ?? parent.id`).
+    Borrar un raíz cascada sus respuestas (a nivel de base de datos).
+  - `PostResponseDto.viewerHasLiked/viewerHasSaved/likeCount/commentCount` ya no son `0`/`false`
+    fijos — `SocialService.getInteractionInfoFor` los agrega en una sola pasada, sin que `posts`
+    consulte `Like`/`SavedPost`/`Comment` con Prisma (regla 7 respetada).
+  - Todo endpoint nuevo con DTO de respuesta decorado desde el inicio (no backfill posterior) —
+    `docs/openapi.json` regenerado, 7 rutas y 8 schemas nuevos verificados.
+  - `docs/DATA-MODEL.md`, `docs/PROCESSES.md`, `src/social/AGENTS.md`, `src/posts/AGENTS.md`,
+    `docs/ROADMAP.md` (3 casillas) actualizados. Verificado por mí de forma independiente:
+    lint/build/test (154/154)/api:export en verde, además de leer a mano la lógica de
+    idempotencia y de anidamiento de comentarios.
+- **Falta:** nada de las 3 tareas de la fase. Fase 5 (afinidad/ranking) es la siguiente del back
+  — ya tiene consumidores listos para escuchar (`post.liked/unliked/saved/unsaved`,
+  `comment.created`), no implementados aquí a propósito (fuera de alcance de esta fase).
+- **Necesito — dos cosas para que revises:**
+  1. **Hallazgo arquitectónico real, no una decisión mía:** implementar like/guardar/
+     comentar en `social` (como indica su propio `AGENTS.md`) hizo que el ciclo `users` ↔
+     `social`, ya documentado en `ARCHITECTURE.md`, se volviera de **tres módulos**
+     (`users` ↔ `social` ↔ `posts`). Se resolvió con `forwardRef` en los tres módulos —sigue sin
+     haber acceso cruzado a tablas ajenas, el cruce sigue siendo por servicio público— pero
+     `ARCHITECTURE.md` quedó actualizado con esto marcado explícitamente "a revisar por el
+     dueño": ¿un ciclo de tres módulos es arquitectura estable, o en una fase futura conviene
+     mover like/guardar/comentar a `posts` (donde ya vive el resto del contenido) para
+     deshacerlo? No se decidió, solo se resolvió lo mínimo para que la fase cerrara.
+  2. Ambigüedades menores resueltas con la opción más simple, sin bloquear: límite de
+     `Comment.body` en 1000 caracteres (el contrato solo pedía "razonable"); `commentCount`
+     cuenta raíces + respuestas (no solo raíces); un post guardado sigue apareciendo en
+     `GET /api/me/saved` aunque el autor se vuelva privado después de guardarlo (se trata como
+     marcador, no se revalida visibilidad en cada lectura); la regla `403`/`404` de visibilidad
+     se aplicó también a like/unlike aunque esa sub-sección del contrato no la repetía
+     explícitamente (sí lo hacen las de guardados/comentarios, y es el criterio consistente en
+     todo el módulo).
+- **Sigue:** Fase 5 del `ROADMAP.md` (afinidad y ranking personalizado, módulo `ranking`) usando
+  este mismo protocolo de orquestación.
+
 ## Entradas
 
 ### 2026-09-02 — Protocolo de orquestación jefe+hijos (tarea, proceso entre repos)

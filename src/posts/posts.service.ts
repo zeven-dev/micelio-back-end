@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  forwardRef,
   ForbiddenException,
   Inject,
   Injectable,
@@ -22,11 +23,26 @@ import { CreatePostDto, PostMediaInputDto } from './dto/create-post.dto';
 import { PostMediaResponseDto, PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
-import { SocialService } from '../social/social.service';
+import {
+  EMPTY_POST_INTERACTION,
+  PostInteractionInfo,
+  SocialService,
+} from '../social/social.service';
 import { UserPublicView, UsersService } from '../users/users.service';
 import { buildTags } from './utils/tags.util';
 
 type PostWithMedia = Post & { media: PostMedia[] };
+
+/**
+ * Lo mínimo que `social` necesita de un post para validar visibilidad y armar los eventos de
+ * interacción (like/save/comment): id, autor y etiquetas. No expone el resto de la forma de
+ * `Post` — esa sigue siendo de este módulo (regla 7 de `AGENTS.md`).
+ */
+export interface PostRef {
+  id: string;
+  authorId: string;
+  tags: string[];
+}
 
 /** Un candidato del home con su clave de orden ya calculada para este viewer. */
 interface RankedPost {
@@ -81,8 +97,15 @@ function isFeedCursor(value: unknown): value is FeedCursor {
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly usersService: UsersService,
-    private readonly socialService: SocialService,
+    // `forwardRef` también aquí: aunque `posts` → `users` no es circular por sí solo, el orden
+    // real de `require()` los mete en el mismo ciclo que `social` (ver la nota en
+    // `PostsModule`), y sin esto Nest resuelve este parámetro como `undefined` en tiempo de
+    // arranque según qué módulo cargue primero `AppModule`.
+    @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
+    // `social` necesita `PostsService.getPostRef`/`findManyByIdsForViewer` para like/save/
+    // comment (visibilidad + eventos), así que el ciclo con `posts` es real, no un descuido —
+    // mismo criterio que `users` ↔ `social` (ver `SocialService`). `forwardRef` en ambos lados.
+    @Inject(forwardRef(() => SocialService)) private readonly socialService: SocialService,
     private readonly filesService: FilesService,
     private readonly configService: ConfigService,
     @Inject(STORAGE_SERVICE) private readonly storageService: StorageService,
@@ -364,6 +387,38 @@ export class PostsService {
     }));
   }
 
+  /**
+   * Lo que `social` necesita de un post para like/save/comment: existencia, autor (para la
+   * regla de visibilidad y el `postAuthorId` de los eventos) y etiquetas (para el payload de
+   * `post.liked`/`post.saved`, que alimentan la afinidad por temas en la Fase 5). `null` si no
+   * existe — `social` decide ahí si eso es `404`.
+   */
+  async getPostRef(id: string): Promise<PostRef | null> {
+    return this.prisma.post.findUnique({
+      where: { id },
+      select: { id: true, authorId: true, tags: true },
+    });
+  }
+
+  /**
+   * Varios posts por id, ya armados como `PostResponseDto` para este viewer. Lo usa `social`
+   * para `GET /api/me/saved`: la fila de guardado solo tiene el `postId`, y este módulo es el
+   * único que sabe construir la forma completa de `Post` (regla 7).
+   */
+  async findManyByIdsForViewer(
+    ids: string[],
+    viewerId: string,
+  ): Promise<Map<string, PostResponseDto>> {
+    const unique = [...new Set(ids)];
+    if (unique.length === 0) return new Map();
+    const posts = await this.prisma.post.findMany({
+      where: { id: { in: unique } },
+      include: { media: { orderBy: { order: 'asc' } } },
+    });
+    const responses = await this.toResponseList(posts, viewerId);
+    return new Map(responses.map((post) => [post.id, post]));
+  }
+
   private async findOwnedOrFail(id: string, authorId: string): Promise<PostWithMedia> {
     const post = await this.prisma.post.findUnique({
       where: { id },
@@ -402,16 +457,26 @@ export class PostsService {
     if (posts.length === 0) {
       return [];
     }
-    const authors = await this.usersService.getPublicViewsByIds(
-      posts.map((post) => post.authorId),
-      viewerId,
-    );
+    const [authors, interactions] = await Promise.all([
+      this.usersService.getPublicViewsByIds(
+        posts.map((post) => post.authorId),
+        viewerId,
+      ),
+      // Likes, guardados y comentarios (Fase 4) vienen de `social` en una sola pasada agregada
+      // para toda la página, no consulta por consulta — mismo criterio que `getGraphInfoFor`.
+      this.socialService.getInteractionInfoFor(
+        posts.map((post) => post.id),
+        viewerId,
+      ),
+    ]);
     const assetIds = posts.flatMap((post) => post.media.map((item) => item.fileAssetId));
     const assets = new Map(
       (await this.filesService.findManyByIds(assetIds)).map((asset) => [asset.id, asset]),
     );
 
-    return Promise.all(posts.map((post) => this.buildPostView(post, viewerId, authors, assets)));
+    return Promise.all(
+      posts.map((post) => this.buildPostView(post, viewerId, authors, assets, interactions)),
+    );
   }
 
   private async buildPostView(
@@ -419,6 +484,7 @@ export class PostsService {
     viewerId: string,
     authors: Map<string, UserPublicView>,
     assets: Map<string, LibraryAssetRef>,
+    interactions: Map<string, PostInteractionInfo>,
   ): Promise<PostResponseDto> {
     const author = authors.get(post.authorId);
     if (!author) {
@@ -432,6 +498,7 @@ export class PostsService {
     );
 
     const isAuthor = post.authorId === viewerId;
+    const interaction = interactions.get(post.id) ?? EMPTY_POST_INTERACTION;
     return {
       id: post.id,
       author,
@@ -440,12 +507,10 @@ export class PostsService {
       position: post.position,
       createdAt: post.createdAt,
       media,
-      // Likes, guardados y comentarios llegan en la Fase 4: hoy el valor real es cero/falso
-      // para todos, no un marcador de posición.
-      viewerHasLiked: false,
-      viewerHasSaved: false,
-      ...(isAuthor ? { likeCount: 0 } : {}),
-      commentCount: 0,
+      viewerHasLiked: interaction.viewerHasLiked,
+      viewerHasSaved: interaction.viewerHasSaved,
+      ...(isAuthor ? { likeCount: interaction.likeCount } : {}),
+      commentCount: interaction.commentCount,
     };
   }
 

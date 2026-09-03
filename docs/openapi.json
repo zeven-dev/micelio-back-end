@@ -417,94 +417,14 @@
         ]
       }
     },
-    "/auth/register": {
+    "/posts/{id}/like": {
       "post": {
-        "operationId": "AuthController_register",
+        "operationId": "SocialController_like",
         "parameters": [
           {
-            "name": "x-client-type",
+            "name": "id",
             "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "operationId": "AuthController_login",
-        "parameters": [
-          {
-            "name": "x-client-type",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/refresh": {
-      "post": {
-        "operationId": "AuthController_refresh",
-        "parameters": [
-          {
-            "name": "x-client-type",
-            "required": true,
-            "in": "header",
+            "in": "path",
             "schema": {
               "type": "string"
             }
@@ -516,79 +436,102 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthResponseDto"
+                  "$ref": "#/components/schemas/LikeStateDto"
                 }
               }
             }
           }
         },
         "tags": [
-          "auth"
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
-      }
-    },
-    "/auth/logout": {
-      "post": {
-        "operationId": "AuthController_logout",
-        "parameters": [],
+      },
+      "delete": {
+        "operationId": "SocialController_unlike",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LikeStateDto"
+                }
+              }
+            }
           }
         },
         "tags": [
-          "auth"
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
         ]
       }
     },
-    "/folders": {
+    "/posts/{id}/likes": {
       "get": {
-        "operationId": "FoldersController_findAll",
+        "operationId": "SocialController_likes",
         "parameters": [
           {
-            "name": "parentId",
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
             "required": false,
             "in": "query",
-            "description": "Carpeta madre. Omitirlo lista las carpetas raíz.",
+            "description": "Cursor opaco devuelto por la página anterior.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "FoldersController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateFolderDto"
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LikeListResponseDto"
+                }
               }
             }
           }
         },
-        "responses": {
-          "201": {
-            "description": ""
-          }
-        },
         "tags": [
-          "folders"
+          "social"
         ],
         "security": [
           {
@@ -597,9 +540,42 @@
         ]
       }
     },
-    "/folders/{id}": {
-      "get": {
-        "operationId": "FoldersController_findOne",
+    "/posts/{id}/save": {
+      "post": {
+        "operationId": "SocialController_save",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveStateDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "SocialController_unsave",
         "parameters": [
           {
             "name": "id",
@@ -612,11 +588,125 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveStateDto"
+                }
+              }
+            }
           }
         },
         "tags": [
-          "folders"
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/me/saved": {
+      "get": {
+        "operationId": "SocialController_saved",
+        "parameters": [
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SavedPostItemDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/posts/{id}/comments": {
+      "post": {
+        "operationId": "SocialController_createComment",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCommentDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
         ],
         "security": [
           {
@@ -624,8 +714,148 @@
           }
         ]
       },
+      "get": {
+        "operationId": "SocialController_comments",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/CommentDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/comments/{id}/replies": {
+      "get": {
+        "operationId": "SocialController_replies",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/CommentDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "social"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/comments/{id}": {
       "patch": {
-        "operationId": "FoldersController_update",
+        "operationId": "SocialController_updateComment",
         "parameters": [
           {
             "name": "id",
@@ -641,18 +871,25 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UpdateFolderDto"
+                "$ref": "#/components/schemas/UpdateCommentDto"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentDto"
+                }
+              }
+            }
           }
         },
         "tags": [
-          "folders"
+          "social"
         ],
         "security": [
           {
@@ -661,7 +898,7 @@
         ]
       },
       "delete": {
-        "operationId": "FoldersController_remove",
+        "operationId": "SocialController_removeComment",
         "parameters": [
           {
             "name": "id",
@@ -673,168 +910,12 @@
           }
         ],
         "responses": {
-          "200": {
+          "204": {
             "description": ""
           }
         },
         "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{folderId}/files": {
-      "get": {
-        "operationId": "FilesController_findAll",
-        "parameters": [
-          {
-            "name": "folderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FileResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "files"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{folderId}/files/presign": {
-      "post": {
-        "operationId": "FilesController_presign",
-        "parameters": [
-          {
-            "name": "folderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PresignFileDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PresignResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "files"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{folderId}/files/confirm": {
-      "post": {
-        "operationId": "FilesController_confirm",
-        "parameters": [
-          {
-            "name": "folderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfirmFileDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "files"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/files/{id}": {
-      "delete": {
-        "operationId": "FilesController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "files"
+          "social"
         ],
         "security": [
           {
@@ -1148,6 +1229,432 @@
           {
             "bearer": []
           }
+        ]
+      }
+    },
+    "/folders/{folderId}/files": {
+      "get": {
+        "operationId": "FilesController_findAll",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files/presign": {
+      "post": {
+        "operationId": "FilesController_presign",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files/confirm": {
+      "post": {
+        "operationId": "FilesController_confirm",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/files/{id}": {
+      "delete": {
+        "operationId": "FilesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders": {
+      "get": {
+        "operationId": "FoldersController_findAll",
+        "parameters": [
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Carpeta madre. Omitirlo lista las carpetas raíz.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "FoldersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{id}": {
+      "get": {
+        "operationId": "FoldersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "FoldersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "FoldersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "auth"
         ]
       }
     },
@@ -1509,121 +2016,346 @@
           "since"
         ]
       },
-      "RegisterDto": {
+      "LikeStateDto": {
         "type": "object",
         "properties": {
-          "email": {
-            "type": "string",
-            "example": "user@example.com"
-          },
-          "password": {
-            "type": "string",
-            "example": "S3cure-Password!"
-          },
-          "name": {
-            "type": "string",
-            "example": "Ada Lovelace"
-          },
-          "username": {
-            "type": "string",
-            "example": "ada.lovelace"
-          },
-          "cedula": {
-            "type": "string",
-            "example": "1020304050",
-            "description": "Cédula colombiana (solo dígitos)"
+          "liked": {
+            "type": "boolean"
           }
         },
         "required": [
-          "email",
-          "password",
-          "name",
-          "username",
-          "cedula"
+          "liked"
         ]
       },
-      "UserResponseDto": {
+      "LikeListItemDto": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserPublicView"
+          },
+          "likedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "user",
+          "likedAt"
+        ]
+      },
+      "LikeListResponseDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LikeListItemDto"
+            }
+          },
+          "nextCursor": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "total",
+          "items",
+          "nextCursor"
+        ]
+      },
+      "SaveStateDto": {
+        "type": "object",
+        "properties": {
+          "saved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "saved"
+        ]
+      },
+      "PostMediaResponseDto": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string"
           },
-          "email": {
+          "order": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO",
+              "AUDIO",
+              "TEXT"
+            ]
+          },
+          "url": {
             "type": "string"
           },
-          "name": {
-            "type": "string",
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
             "nullable": true
           }
         },
         "required": [
           "id",
-          "email",
-          "name"
+          "order",
+          "type",
+          "url",
+          "expiresAt",
+          "width",
+          "height"
         ]
       },
-      "AuthResponseDto": {
+      "PostResponseDto": {
         "type": "object",
         "properties": {
-          "accessToken": {
+          "id": {
             "type": "string"
           },
-          "user": {
-            "$ref": "#/components/schemas/UserResponseDto"
-          }
-        },
-        "required": [
-          "accessToken",
-          "user"
-        ]
-      },
-      "LoginDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "example": "user@example.com"
+          "author": {
+            "$ref": "#/components/schemas/UserPublicView"
           },
-          "password": {
+          "description": {
             "type": "string",
-            "example": "S3cure-Password!"
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "position": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaResponseDto"
+            }
+          },
+          "viewerHasLiked": {
+            "type": "boolean"
+          },
+          "viewerHasSaved": {
+            "type": "boolean"
+          },
+          "likeCount": {
+            "type": "number"
+          },
+          "commentCount": {
+            "type": "number"
           }
         },
         "required": [
-          "email",
-          "password"
+          "id",
+          "author",
+          "description",
+          "tags",
+          "position",
+          "createdAt",
+          "media",
+          "viewerHasLiked",
+          "viewerHasSaved",
+          "commentCount"
         ]
       },
-      "CreateFolderDto": {
+      "SavedPostItemDto": {
         "type": "object",
         "properties": {
-          "name": {
+          "post": {
+            "$ref": "#/components/schemas/PostResponseDto"
+          },
+          "savedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "post",
+          "savedAt"
+        ]
+      },
+      "CreateCommentDto": {
+        "type": "object",
+        "properties": {
+          "body": {
             "type": "string",
-            "example": "Vacaciones 2026"
+            "example": "Qué buena paleta de color",
+            "maxLength": 1000
           },
           "parentId": {
-            "type": "object",
-            "description": "Carpeta madre. Ausente o null = carpeta raíz.",
-            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
-            "nullable": true
+            "type": "string",
+            "description": "Comentario al que responde. Si apunta a una respuesta (no a un raíz), el servidor lo cuelga del mismo raíz: la profundidad nunca pasa de un nivel."
           }
         },
         "required": [
-          "name"
+          "body"
         ]
       },
-      "UpdateFolderDto": {
+      "CommentDto": {
         "type": "object",
         "properties": {
-          "name": {
-            "type": "string",
-            "example": "Vacaciones 2026"
+          "id": {
+            "type": "string"
+          },
+          "author": {
+            "$ref": "#/components/schemas/UserPublicView"
+          },
+          "body": {
+            "type": "string"
           },
           "parentId": {
-            "type": "object",
-            "description": "Nueva carpeta madre. `null` mueve la carpeta a la raíz; omitirlo no la mueve.",
-            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "type": "string",
             "nullable": true
+          },
+          "replyCount": {
+            "type": "number"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "author",
+          "body",
+          "parentId",
+          "createdAt"
+        ]
+      },
+      "UpdateCommentDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "PostMediaInputDto": {
+        "type": "object",
+        "properties": {
+          "fileAssetId": {
+            "type": "string",
+            "description": "Archivo de la biblioteca del autor."
+          },
+          "width": {
+            "type": "number",
+            "description": "Ancho en píxeles, medido por el cliente al publicar. El binario nunca pasa por el backend, así que nadie más lo conoce. Sin sentido para audio/texto.",
+            "example": 1080
+          },
+          "height": {
+            "type": "number",
+            "description": "Alto en píxeles (ver `width`).",
+            "example": 1350
+          }
+        },
+        "required": [
+          "fileAssetId"
+        ]
+      },
+      "CreatePostDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "example": "Bocetos del mural #proceso"
+          },
+          "tags": {
+            "description": "Etiquetas explícitas. El servidor las normaliza y les suma los #hashtags de la descripción; si tras normalizar quedan más de 10, responde 400.",
+            "example": [
+              "ilustración",
+              "proceso"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "media": {
+            "description": "Medios en el orden del carrusel.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaInputDto"
+            }
+          }
+        },
+        "required": [
+          "media"
+        ]
+      },
+      "ReorderPostsDto": {
+        "type": "object",
+        "properties": {
+          "orderedIds": {
+            "description": "Todos los posts del usuario, en el orden deseado.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "orderedIds"
+        ]
+      },
+      "ReorderResponseDto": {
+        "type": "object",
+        "properties": {
+          "reordered": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reordered"
+        ]
+      },
+      "UpdatePostDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "object",
+            "example": "Versión final del mural #proceso"
+          },
+          "tags": {
+            "example": [
+              "mural",
+              "proceso"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaInputDto"
+            }
           }
         }
       },
@@ -1763,210 +2495,123 @@
           "size"
         ]
       },
-      "PostMediaResponseDto": {
+      "CreateFolderDto": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "order": {
-            "type": "number"
-          },
-          "type": {
+          "name": {
             "type": "string",
-            "enum": [
-              "IMAGE",
-              "VIDEO",
-              "AUDIO",
-              "TEXT"
-            ]
+            "example": "Vacaciones 2026"
           },
-          "url": {
-            "type": "string"
-          },
-          "expiresAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "width": {
-            "type": "number",
-            "nullable": true
-          },
-          "height": {
-            "type": "number",
-            "nullable": true
-          }
-        },
-        "required": [
-          "id",
-          "order",
-          "type",
-          "url",
-          "expiresAt",
-          "width",
-          "height"
-        ]
-      },
-      "PostResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "author": {
-            "$ref": "#/components/schemas/UserPublicView"
-          },
-          "description": {
-            "type": "string",
-            "nullable": true
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "position": {
-            "type": "number"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "media": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostMediaResponseDto"
-            }
-          },
-          "viewerHasLiked": {
-            "type": "boolean"
-          },
-          "viewerHasSaved": {
-            "type": "boolean"
-          },
-          "likeCount": {
-            "type": "number"
-          },
-          "commentCount": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "id",
-          "author",
-          "description",
-          "tags",
-          "position",
-          "createdAt",
-          "media",
-          "viewerHasLiked",
-          "viewerHasSaved",
-          "commentCount"
-        ]
-      },
-      "PostMediaInputDto": {
-        "type": "object",
-        "properties": {
-          "fileAssetId": {
-            "type": "string",
-            "description": "Archivo de la biblioteca del autor."
-          },
-          "width": {
-            "type": "number",
-            "description": "Ancho en píxeles, medido por el cliente al publicar. El binario nunca pasa por el backend, así que nadie más lo conoce. Sin sentido para audio/texto.",
-            "example": 1080
-          },
-          "height": {
-            "type": "number",
-            "description": "Alto en píxeles (ver `width`).",
-            "example": 1350
-          }
-        },
-        "required": [
-          "fileAssetId"
-        ]
-      },
-      "CreatePostDto": {
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string",
-            "example": "Bocetos del mural #proceso"
-          },
-          "tags": {
-            "description": "Etiquetas explícitas. El servidor las normaliza y les suma los #hashtags de la descripción; si tras normalizar quedan más de 10, responde 400.",
-            "example": [
-              "ilustración",
-              "proceso"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "media": {
-            "description": "Medios en el orden del carrusel.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostMediaInputDto"
-            }
-          }
-        },
-        "required": [
-          "media"
-        ]
-      },
-      "ReorderPostsDto": {
-        "type": "object",
-        "properties": {
-          "orderedIds": {
-            "description": "Todos los posts del usuario, en el orden deseado.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "orderedIds"
-        ]
-      },
-      "ReorderResponseDto": {
-        "type": "object",
-        "properties": {
-          "reordered": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "reordered"
-        ]
-      },
-      "UpdatePostDto": {
-        "type": "object",
-        "properties": {
-          "description": {
+          "parentId": {
             "type": "object",
-            "example": "Versión final del mural #proceso"
+            "description": "Carpeta madre. Ausente o null = carpeta raíz.",
+            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Vacaciones 2026"
           },
-          "tags": {
-            "example": [
-              "mural",
-              "proceso"
-            ],
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "media": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostMediaInputDto"
-            }
+          "parentId": {
+            "type": "object",
+            "description": "Nueva carpeta madre. `null` mueve la carpeta a la raíz; omitirlo no la mueve.",
+            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "nullable": true
           }
         }
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure-Password!"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ada Lovelace"
+          },
+          "username": {
+            "type": "string",
+            "example": "ada.lovelace"
+          },
+          "cedula": {
+            "type": "string",
+            "example": "1020304050",
+            "description": "Cédula colombiana (solo dígitos)"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name",
+          "username",
+          "cedula"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ]
+      },
+      "AuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponseDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "user"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure-Password!"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
       },
       "UpdateUserRoleDto": {
         "type": "object",

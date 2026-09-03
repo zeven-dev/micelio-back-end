@@ -62,7 +62,12 @@ describe('PostsService', () => {
     filterPublicIds: jest.Mock;
     findPublicUserIds: jest.Mock;
   };
-  let social: { getFollowedIds: jest.Mock; getFavoriteIds: jest.Mock; getMutualIds: jest.Mock };
+  let social: {
+    getFollowedIds: jest.Mock;
+    getFavoriteIds: jest.Mock;
+    getMutualIds: jest.Mock;
+    getInteractionInfoFor: jest.Mock;
+  };
   let files: { findOwnedByUser: jest.Mock; findManyByIds: jest.Mock };
   let storage: jest.Mocked<StorageService>;
   let events: { emit: jest.Mock };
@@ -96,6 +101,16 @@ describe('PostsService', () => {
       getFollowedIds: jest.fn().mockResolvedValue([]),
       getFavoriteIds: jest.fn().mockResolvedValue([]),
       getMutualIds: jest.fn().mockResolvedValue([]),
+      // Fase 4: sin interacciones por defecto, igual que el valor vacío real de `social`.
+      getInteractionInfoFor: jest.fn(
+        async (postIds: string[]) =>
+          new Map(
+            postIds.map((id) => [
+              id,
+              { viewerHasLiked: false, viewerHasSaved: false, likeCount: 0, commentCount: 0 },
+            ]),
+          ),
+      ),
     };
     files = {
       findOwnedByUser: jest
@@ -204,6 +219,24 @@ describe('PostsService', () => {
       users.getPublicViewsByIds.mockResolvedValue(new Map([[AUTHOR_ID, authorView]]));
       const other = await service.findOne('post-1', VIEWER_ID);
       expect(other).not.toHaveProperty('likeCount');
+    });
+
+    // Fase 4: los contadores/flags sociales ya no son un valor fijo — vienen de `social`.
+    it('arma viewerHasLiked/viewerHasSaved/likeCount/commentCount con lo que aporta social', async () => {
+      prisma.post.findUnique.mockResolvedValue(postRow());
+      social.getInteractionInfoFor.mockResolvedValue(
+        new Map([
+          ['post-1', { viewerHasLiked: true, viewerHasSaved: true, likeCount: 5, commentCount: 2 }],
+        ]),
+      );
+
+      const post = await service.findOne('post-1', AUTHOR_ID);
+
+      expect(post.viewerHasLiked).toBe(true);
+      expect(post.viewerHasSaved).toBe(true);
+      expect(post.likeCount).toBe(5);
+      expect(post.commentCount).toBe(2);
+      expect(social.getInteractionInfoFor).toHaveBeenCalledWith(['post-1'], AUTHOR_ID);
     });
 
     it('firma la URL de cada medio y anuncia su vencimiento', async () => {

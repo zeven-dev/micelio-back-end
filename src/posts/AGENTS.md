@@ -46,9 +46,12 @@ Formas exactas en [`docs/API-CONTRACTS.md`](../../docs/API-CONTRACTS.md) ("Post"
   son nulos para audio/texto.
 - **URLs firmadas:** cada medio se sirve con `url` + `expiresAt` (`AWS_S3_SIGNED_URL_EXPIRES_IN`).
   El cliente nunca arma URLs de S3.
-- **Contadores sociales:** `likeCount` solo se incluye si el viewer es el autor; hoy vale `0`,
-  igual que `commentCount`, `viewerHasLiked` y `viewerHasSaved` — no hay likes ni comentarios
-  hasta la Fase 4, así que es el valor real y no un marcador inventado.
+- **Contadores sociales (reales desde la Fase 4):** `viewerHasLiked`, `viewerHasSaved`,
+  `likeCount` (solo si el viewer es el autor) y `commentCount` (raíces + respuestas) vienen de
+  `SocialService.getInteractionInfoFor(postIds, viewerId)`, pedido una sola vez por página en
+  `toResponseList` — no consulta por post. Este módulo **no** consulta `likes`, `saved_posts` ni
+  `comments` con Prisma (regla 7); si algún día esos números se ven mal, el bug está en
+  `social`, no aquí.
 
 ## Dependencias en otros módulos
 - `FileAsset` ↔ `PostMedia` con `onDelete: Restrict`: borrar un archivo publicado responde
@@ -57,7 +60,21 @@ Formas exactas en [`docs/API-CONTRACTS.md`](../../docs/API-CONTRACTS.md) ("Post"
 - Los ajustes de presentación (`feedSettings`) viven en `users` (columnas `feedLayout`,
   `feedColumns`, `feedGap` de `User`), no aquí: son del perfil, no de una publicación.
 
+## Métodos públicos que consume `social`
+- `getPostRef(id)` — `{ id, authorId, tags } | null`, lo mínimo para que `social` valide
+  visibilidad y arme los eventos de like/save/comment (Fase 4).
+- `findManyByIdsForViewer(ids, viewerId)` — el `Post` completo (armado igual que cualquier otra
+  lectura, medios firmados incluidos) para varios ids a la vez; lo usa `GET /api/me/saved`.
+
+## Ciclo con `social` (Fase 4)
+`social` ahora también depende de este módulo (`getPostRef`/`findManyByIdsForViewer`), y este
+módulo ya dependía de `social` (grafo del home, visibilidad): es un ciclo real, resuelto con
+`forwardRef` en ambos `@Module({ imports })` y en los `@Inject()` de ambos servicios — mismo
+mecanismo que `users` ↔ `social` desde la Fase 3. Detalle de por qué también hizo falta
+envolver la dependencia (no circular por sí sola) con `users` en `docs/PROCESSES.md` ("Ciclo
+`posts` ↔ `social`"): en un ciclo de tres módulos, `forwardRef` hace falta en todo enlace que
+comparta camino de carga con el ciclo, no solo en los dos "directamente" circulares.
+
 ## Pendiente (fases siguientes, no improvisar aquí)
-- Likes, guardados y comentarios (Fase 4) — los campos ya están en la respuesta.
 - **Feed v2** (Fase 5): el mismo endpoint gana los boosts por afinidad. La respuesta y el cursor
   no cambian, así que los clientes no se tocan.

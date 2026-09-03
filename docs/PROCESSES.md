@@ -179,11 +179,12 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
 - **Pasos (reordenar):** compara el conjunto de `orderedIds` con las publicaciones del autor
   (misma cantidad, sin repetidos, todos suyos; si no, `400`) y persiste `position` = índice del
   arreglo en una transacción → `{ reordered: true }`.
-- **Notas:** `posts` **no** consulta `users`, `folders` ni `file_assets` con Prisma (regla 7);
-  todo cruce va por el servicio público del otro módulo. Los contadores sociales
-  (`likeCount`/`commentCount`/`viewerHasLiked`/`viewerHasSaved`) valen `0`/`false` hasta la
-  Fase 4 — y `likeCount` solo se incluye si el viewer es el autor. Borrar una publicación no
-  borra archivos: la biblioteca es independiente del feed.
+- **Notas:** `posts` **no** consulta `users`, `folders`, `file_assets`, `likes`, `saved_posts`
+  ni `comments` con Prisma (regla 7); todo cruce va por el servicio público del otro módulo. Los
+  contadores sociales (`likeCount`/`commentCount`/`viewerHasLiked`/`viewerHasSaved`) son reales
+  desde la Fase 4 (ver "Likes y guardados (Fase 4)" abajo) — y `likeCount` solo se incluye si el
+  viewer es el autor. Borrar una publicación no borra archivos: la biblioteca es independiente
+  del feed.
 
 ### Ajustes de presentación del feed (Fase 2)
 - **Módulos:** `src/users`
@@ -261,6 +262,87 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   `docs/ARCHITECTURE.md`. El stream D pide a `users` la lista de ids públicos: **límite
   conocido** documentado en `STATUS.md` (a partir de unos miles de usuarios públicos habrá que
   denormalizar o materializar, porque `posts` no puede unir con la tabla `users`).
+
+### Likes y guardados (Fase 4)
+- **Módulos:** `src/social` (+ `src/posts` y `src/users` por sus servicios públicos)
+- **Disparadores:** `POST/DELETE /api/posts/:id/like`, `GET /api/posts/:id/likes`,
+  `POST/DELETE /api/posts/:id/save`, `GET /api/me/saved`
+- **Pasos:** pide el post a `PostsService.getPostRef` (`404` si no existe) → valida visibilidad
+  con `UsersService.canViewContentOf` (`403` si no, misma regla que `GET /api/posts/:id`) →
+  crea/borra la fila `Like`/`SavedPost`. **Idempotente** igual que `follow`: dar like o guardar
+  dos veces no duplica la fila (único `(postId, userId)`) ni vuelve a emitir el evento; quitar
+  algo que no existía tampoco es error y tampoco emite. Al crear, emite `post.liked`/
+  `post.saved`; al borrar una fila que sí existía, `post.unliked`/`post.unsaved` — los cuatro
+  eventos llevan `{ postId, postAuthorId, userId, tags }` (las etiquetas del post, para la
+  afinidad por temas de la Fase 5). `GET /api/posts/:id/likes` es **solo del autor** (`403`
+  para cualquier otro viewer, sin pasar por la regla de visibilidad general) y devuelve además
+  `total`. `GET /api/me/saved` trae el `Post` completo embebido — lo arma
+  `PostsService.findManyByIdsForViewer`, porque `social` no sabe construir la forma de `Post`
+  (regla 7).
+- **Contador agregado para `posts`:** `SocialService.getInteractionInfoFor(postIds, viewerId)`
+  arma `viewerHasLiked/viewerHasSaved/likeCount/commentCount` de una página completa en una sola
+  pasada (cuatro consultas agregadas, no cuatro por post) — mismo criterio que
+  `getGraphInfoFor`. `PostsService.buildPostView` la consume así en vez de los `0`/`false` fijos
+  que traía desde la Fase 2.
+- **Notas:** `commentCount` cuenta **todos** los comentarios del post (raíces + respuestas), no
+  solo los raíz. Ver "Ciclo `posts` ↔ `social`" abajo para cómo se resolvió que `social`
+  necesitara datos de `posts`.
+
+### Comentarios anidados (Fase 4)
+- **Módulos:** `src/social` (+ `src/posts` y `src/users` por sus servicios públicos)
+- **Disparadores:** `POST /api/posts/:id/comments`, `GET /api/posts/:id/comments`,
+  `GET /api/comments/:id/replies`, `PATCH /api/comments/:id`, `DELETE /api/comments/:id`
+- **Pasos (crear):** valida visibilidad del post (`403`/`404`, igual que arriba) → si viene
+  `parentId`, lo busca (`404` si no existe o es de otro post) y **cuelga la respuesta nueva del
+  mismo raíz**: si el padre ya es una respuesta (`parent.parentId` no nulo), usa ese
+  `parent.parentId` en vez del id del padre — así la profundidad nunca pasa de un nivel
+  (decisión #12 de `PRODUCT.md`, la regla vive en el servicio, no en el schema) → crea el
+  `Comment` → emite `comment.created` (`{ commentId, postId, postAuthorId, authorId }`).
+- **Pasos (leer):** el listado de un post trae los **raíz** (`parentId: null`), orden
+  `createdAt` asc, con `replyCount` calculado en una sola consulta agregada
+  (`groupBy` por `parentId`) para toda la página. `GET /api/comments/:id/replies` primero valida
+  que `:id` exista y que el post siga siendo visible, y solo entonces que sea un raíz
+  (`parentId: null`) — si no, `404` en cualquiera de los dos casos, sin distinguir cuál para no
+  filtrar más de lo necesario a quien no debería ver el post. Las respuestas nunca llevan
+  `replyCount` (ver "Comment" en `API-CONTRACTS.md`).
+- **Pasos (editar/borrar):** ambos exigen visibilidad del post **y** ser el autor del comentario
+  (`403` si no). Borrar un comentario raíz se lleva sus respuestas por la cascada de la base
+  (`onDelete: Cascade` en `Comment.parentId`, ver `DATA-MODEL.md`) — el servicio no las borra a
+  mano ni las recorre. Sin evento propio de edición/borrado; solo `comment.created` alimenta
+  afinidad (Fase 5).
+- **Notas:** `body` tope en 1000 caracteres (`MAX_COMMENT_LENGTH`,
+  `src/social/dto/create-comment.dto.ts`) — `API-CONTRACTS.md` solo pedía un límite "razonable"
+  y no fijaba el número; se eligió bastante menor al de la descripción de un post (2200) porque
+  un comentario es una respuesta corta, no una pieza de contenido.
+
+### Ciclo `posts` ↔ `social` (Fase 4, ampliación del ciclo `users` ↔ `social`)
+- **Módulos:** `src/posts`, `src/social`
+- **Qué:** like/guardado/comentario viven en `social` (regla 7: el cruce de dominios es por
+  servicio público, y estas tablas son de `social`) pero necesitan el post — su autor para la
+  regla de visibilidad y el `postAuthorId` de los eventos, sus etiquetas para el payload de
+  `post.liked`/`post.saved`. `social` los pide a un método público nuevo,
+  `PostsService.getPostRef(id)` (`{ id, authorId, tags } | null`, nunca el `Post` completo). Al
+  revés, `GET /api/me/saved` necesita el `Post` completo embebido, que solo `posts` sabe armar:
+  `PostsService.findManyByIdsForViewer(ids, viewerId)`. Como `posts` ya dependía de `social`
+  (grafo del home, visibilidad), esto cierra un ciclo real de módulos —igual que `users` ↔
+  `social` desde la Fase 3— y se resuelve con el mismo mecanismo: `forwardRef()` en los
+  `imports` de `PostsModule`/`SocialModule` y en los `@Inject()` de los servicios.
+- **Nota de implementación importante:** en este ciclo de tres (`users` ↔ `social` ↔ `posts`),
+  `forwardRef` en el `@Module({ imports })` de cada punta **no basta por sí solo**. NestJS
+  compila a CommonJS y evalúa el arreglo `imports` de forma síncrona con el `require()` en curso
+  en ese momento; con tres módulos enlazándose entre sí, el orden real de carga (que decide
+  `AppModule` según el orden de sus propios `import`) puede hacer que `PostsModule` intente leer
+  `UsersModule` **antes** de que el archivo de `users.module.ts` termine de ejecutarse — aunque
+  `posts` → `users` no sea circular por sí solo. Sin `forwardRef(() => UsersModule)` también ahí
+  (y sin `@Inject(forwardRef(() => UsersService))` en el constructor de `PostsService`), el
+  arranque fallaba con *"The module at index [0] of the PostsModule imports array is
+  undefined"* o, ya resuelto eso, con el parámetro de `UsersService` sin poder resolverse
+  (`Nest can't resolve dependencies... argument dependency at index [1]`) — **según qué módulo
+  cargara primero** `AppModule`, no de forma determinista al leer el código. La lección: en un
+  ciclo de tres o más módulos, todo enlace que comparta camino de carga con el ciclo necesita
+  `forwardRef`, no solo los dos que se necesitan "directamente". Verificado con
+  `npm run api:export` (bootea `AppModule` completo) además de los tests unitarios, que mockean
+  los servicios y no habrían detectado esto.
 
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`

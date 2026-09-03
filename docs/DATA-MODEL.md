@@ -172,6 +172,56 @@ archivo. Estas columnas solo pisan ese valor cuando el cliente manda dimensiones
 —útil si alguna vez se recorta un medio al publicarlo— y quedan nulas en el caso normal.
 Lectura: `PostMedia.width ?? FileAsset.width`.
 
+### Like (`likes`)
+Like de un usuario a un post. Fase 4.
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| id | uuid PK | |
+| postId | FK → Post | cascade delete |
+| userId | FK → User | quien dio like; cascade delete |
+| createdAt | datetime | el `likedAt` del listado |
+
+Único `(postId, userId)`: dar like dos veces es idempotente porque la segunda fila no puede
+existir, no porque el servicio la esquive por su cuenta. Índice extra `(postId, createdAt)` para
+`GET /api/posts/:id/likes` (orden `likedAt` desc, solo el autor del post la ve — ver
+`API-CONTRACTS.md`).
+
+### SavedPost (`saved_posts`)
+Post guardado por un usuario en su colección privada. Fase 4.
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| id | uuid PK | |
+| postId | FK → Post | cascade delete |
+| userId | FK → User | quien guardó; cascade delete |
+| createdAt | datetime | el `savedAt` de `GET /api/me/saved` |
+
+Único `(postId, userId)`: mismo criterio de idempotencia que `Like`. Índice `(userId,
+createdAt)` para el listado propio, orden `savedAt` desc.
+
+### Comment (`comments`)
+Comentario de un post, anidado a **un solo nivel** (decisión #12 de `PRODUCT.md`, tomada antes
+de crear la entidad para no pagar la migración después). Fase 4.
+
+| Campo | Tipo | Notas |
+| --- | --- | --- |
+| id | uuid PK | |
+| postId | FK → Post | cascade delete |
+| authorId | FK → User | cascade delete |
+| body | string | validado por el DTO (máx 1000 caracteres, ver `API-CONTRACTS.md`) |
+| parentId | FK → Comment (auto-relación), nullable | `null` = raíz; no-nulo = respuesta. `onDelete: Cascade` |
+| createdAt | datetime | |
+
+`parentId` es una FK autorreferente `ON DELETE CASCADE`: borrar un comentario raíz se lleva sus
+respuestas. La **regla de un solo nivel** (responder a una respuesta cuelga del mismo raíz) no
+es del schema — no hay CHECK ni trigger — la aplica `SocialService.createComment` al resolver
+qué `parentId` guardar. Índice `(postId, parentId, createdAt)`: cubre tanto el listado de
+raíces de un post (`postId + parentId: null`, orden `createdAt` asc) como el de respuestas de un
+raíz (`parentId`, mismo orden) con la misma forma de consulta.
+
+Migración: `20260903002142_add_likes_saves_comments`.
+
 ### Ajustes de feed en User (Fase 2)
 `feedLayout` (enum `FeedLayout`: `GRID | MASONRY`, default `GRID`), `feedColumns` (int,
 default 3, validado 1–6) y `feedGap` (int, default 2, validado 0–5 — **índice** de la escala de
@@ -199,15 +249,13 @@ Ver `Follow` en "Entidades existentes". La **regla de visibilidad** no es una ta
 `SocialService` (`canView` / `canViewWithGraph`) y es el único lugar donde se decide si X ve el
 contenido de Y (propio, público, o follow mutuo).
 
-### Fase 4 — Interacciones sociales
-- **Like**: `id, postId, userId, createdAt` con único (postId, userId). El dueño del post ve el
-  contador **y la lista de quiénes** dieron like; nadie más ve nada.
-- **SavedPost**: `id, postId, userId, createdAt` único (postId, userId) — guardados.
-- **Comment**: `id, postId, authorId, body, parentId?, createdAt`. `parentId` apunta a otro
-  `Comment` del mismo post (auto-relación, `onDelete: Cascade`): **respuestas anidadas desde el
-  inicio**, decisión del dueño (PRODUCT.md #12), tomada antes de crear la entidad para no pagar
-  la migración después. Índice por `(postId, parentId, createdAt)`: los comentarios raíz son los
-  de `parentId = null`.
+### Fase 4 — Interacciones sociales — **implementado**
+Ver `Like`, `SavedPost` y `Comment` en "Entidades existentes" arriba: los tres campos exactos que
+esta sección planificaba se implementaron sin desviarse (mismos campos, mismo único
+`(postId, userId)` en `Like`/`SavedPost`, misma auto-relación `onDelete: Cascade` y el mismo
+índice `(postId, parentId, createdAt)` en `Comment`). La única precisión que se sumó al
+implementar: el límite de longitud de `Comment.body` (1000 caracteres — `API-CONTRACTS.md` solo
+pedía "razonable", ver `PROCESSES.md` para el porqué del número).
 
 ### Fase 5 — Afinidad y ranking (módulo `ranking`)
 - **UserAffinity**: `id, userId → User, targetUserId → User, score Float @default(0),
