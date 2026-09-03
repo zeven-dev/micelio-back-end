@@ -7,6 +7,7 @@ import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { AuthService } from './auth.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
+import { LogoutResponseDto } from './dto/logout-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { JwtRefreshAuthGuard } from './guards/jwt-refresh-auth.guard';
 import { AuthenticatedUser } from './interfaces/authenticated-user.interface';
@@ -64,6 +65,7 @@ export class AuthController {
   // El perfil de la sesión vive en `GET /api/users/me` (forma `Me` de
   // `API-CONTRACTS.md`); `auth` solo maneja el ciclo de vida de los tokens.
   @Roles(...ALL_ROLES)
+  @ApiCreatedResponse({ type: LogoutResponseDto })
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('refresh_token', { path: '/api/auth' });

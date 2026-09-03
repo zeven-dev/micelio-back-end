@@ -7,7 +7,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1404,7 +1411,17 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FolderResponseDto"
+                  }
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1431,7 +1448,14 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1459,7 +1483,14 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderDetailResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1495,7 +1526,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1650,7 +1688,14 @@
         "parameters": [],
         "responses": {
           "201": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1683,7 +1728,14 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateUserRoleResponseDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -1719,6 +1771,24 @@
       }
     },
     "schemas": {
+      "HealthResponseDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "timestamp": {
+            "type": "string",
+            "description": "ISO 8601",
+            "example": "2026-09-03T00:00:00.000Z"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp"
+        ]
+      },
       "FeedSettingsView": {
         "type": "object",
         "properties": {
@@ -2495,6 +2565,118 @@
           "size"
         ]
       },
+      "FolderCountDto": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "number"
+          },
+          "children": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "files",
+          "children"
+        ]
+      },
+      "FolderResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "_count": {
+            "$ref": "#/components/schemas/FolderCountDto"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "userId",
+          "parentId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "FolderPathItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "FolderDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "_count": {
+            "$ref": "#/components/schemas/FolderCountDto"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderPathItemDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "userId",
+          "parentId",
+          "createdAt",
+          "updatedAt",
+          "_count",
+          "path"
+        ]
+      },
       "CreateFolderDto": {
         "type": "object",
         "properties": {
@@ -2613,6 +2795,17 @@
           "password"
         ]
       },
+      "LogoutResponseDto": {
+        "type": "object",
+        "properties": {
+          "loggedOut": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "loggedOut"
+        ]
+      },
       "UpdateUserRoleDto": {
         "type": "object",
         "properties": {
@@ -2628,6 +2821,31 @@
           }
         },
         "required": [
+          "role"
+        ]
+      },
+      "UpdateUserRoleResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "TEACHER",
+              "ADMIN",
+              "SUPPORT"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "username",
           "role"
         ]
       }

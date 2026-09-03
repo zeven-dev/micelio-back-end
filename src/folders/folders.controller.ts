@@ -1,9 +1,16 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CreateFolderDto } from './dto/create-folder.dto';
+import { FolderDetailResponseDto, FolderResponseDto } from './dto/folder-response.dto';
 import { UpdateFolderDto } from './dto/update-folder.dto';
 import { FoldersService } from './folders.service';
 
@@ -21,22 +28,26 @@ export class FoldersController {
     required: false,
     description: 'Carpeta madre. Omitirlo lista las carpetas raíz.',
   })
+  @ApiOkResponse({ type: [FolderResponseDto] })
   findAll(@CurrentUser() user: AuthenticatedUser, @Query('parentId') parentId?: string) {
     return this.foldersService.findAllForUser(user.id, parentId ?? null);
   }
 
   /** Incluye `path`: el breadcrumb desde la raíz hasta esta carpeta. */
   @Get(':id')
+  @ApiOkResponse({ type: FolderDetailResponseDto })
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.foldersService.findOneWithPath(id, user.id);
   }
 
   @Post()
+  @ApiCreatedResponse({ type: FolderResponseDto })
   create(@Body() dto: CreateFolderDto, @CurrentUser() user: AuthenticatedUser) {
     return this.foldersService.create(user.id, dto);
   }
 
   @Patch(':id')
+  @ApiOkResponse({ type: FolderResponseDto })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateFolderDto,

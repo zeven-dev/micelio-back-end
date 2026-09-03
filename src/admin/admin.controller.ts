@@ -1,9 +1,10 @@
 import { Body, Controller, NotFoundException, Param, Patch } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UsersService } from '../users/users.service';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
+import { UpdateUserRoleResponseDto } from './dto/update-user-role-response.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -13,6 +14,7 @@ export class AdminController {
   constructor(private readonly usersService: UsersService) {}
 
   @Patch(':id/role')
+  @ApiOkResponse({ type: UpdateUserRoleResponseDto })
   async updateRole(@Param('id') id: string, @Body() dto: UpdateUserRoleDto) {
     const user = await this.usersService.findById(id);
     if (!user) {

@@ -18,6 +18,27 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ---
 
+### 2026-09-03 — Completar DTOs de respuesta faltantes (tarea, deuda técnica)
+- **Listo:** `docs/openapi.json` ya cubre las 8 rutas que faltaban: `folders` completo
+  (`FolderResponseDto`/`FolderDetailResponseDto`/`FolderCountDto`/`FolderPathItemDto`), `GET
+  /api/health`, `POST /api/auth/logout`, `PATCH /api/admin/users/:id/role`. Verificado por mí de
+  forma independiente: lint/build/test (154/154)/api:export en verde.
+- **Necesito — dos discrepancias reales encontradas al confirmar las formas contra el código
+  (no corregidas, son tuyas para decidir):**
+  1. `API-CONTRACTS.md` dice que `Folder._count` siempre viene, pero `POST /api/folders` y
+     `PATCH /api/folders/:id` devuelven la fila cruda de Prisma **sin** ese agregado (no usan
+     `include`). El DTO quedó fiel al código real (`_count` opcional en la base, requerido solo
+     en el detalle) en vez de mentir sobre lo que el contrato prometía. ¿La prosa del contrato es
+     aspiracional y hay que corregirla, o `create`/`update` deberían empezar a incluir `_count`
+     para ser consistentes con el resto?
+  2. `DELETE /api/folders/:id` documenta `204` pero el handler no tiene `@HttpCode(204)` (a
+     diferencia de sus equivalentes en `posts`/`social`, que sí lo tienen) — hoy responde `200`
+     por defecto de Nest. Bug preexistente, no introducido por esta tarea; se dejó igual porque
+     corregirlo cambia comportamiento real de la API y no era el alcance pedido.
+- **Falta:** nada de esta tarea.
+- **Sigue:** el refactor del ciclo de tres módulos (`users`↔`social`↔`posts`) que decidiste
+  hacer ahora, en una tarea aparte.
+
 ### 2026-09-03 — Fase 4: likes, guardados y comentarios (cierre de fase, back-end)
 - **Listo:**
   - **`Like`, `SavedPost`, `Comment`** en `prisma/schema.prisma` exactos a `DATA-MODEL.md`;
