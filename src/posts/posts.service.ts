@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  forwardRef,
   Inject,
   Injectable,
   NotFoundException,
@@ -98,7 +99,9 @@ function isSavedCursor(value: unknown): value is SavedCursor {
 export class PostsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly usersService: UsersService,
+    // Ciclo real con `users` desde la Fase 4.5 (el perfil cuenta publicaciones, los posts
+    // embeben a su autor): ver la nota de `PostsModule` y la desviación 5 de `ARCHITECTURE.md`.
+    @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
     // Grafo del home (seguidos, favoritos, mutuos): dependencia de una sola dirección desde el
     // refactor que deshizo el ciclo de tres módulos de la Fase 4 — `social` ya no depende de
     // `posts` en absoluto, así que este borde no necesita `forwardRef`.
@@ -447,6 +450,24 @@ export class PostsService {
     });
     const responses = await this.toResponseList(posts, viewerId);
     return new Map(responses.map((post) => [post.id, post]));
+  }
+
+  /**
+   * Cuántas publicaciones tiene cada autor, en una sola consulta agrupada. Lo consume `users`
+   * para el `postsCount` de la cabecera de perfil (Fase 4.5): el conteo es un dato de **este**
+   * dominio, así que `users` lo pide por servicio en vez de contar la tabla `posts` por su
+   * cuenta (regla 7 de `AGENTS.md`). Los autores sin publicaciones no salen en el `groupBy`;
+   * quien llama resuelve la ausencia como `0`.
+   */
+  async countByAuthorIds(authorIds: string[]): Promise<Map<string, number>> {
+    const unique = [...new Set(authorIds)];
+    if (unique.length === 0) return new Map();
+    const grouped = await this.prisma.post.groupBy({
+      by: ['authorId'],
+      where: { authorId: { in: unique } },
+      _count: { _all: true },
+    });
+    return new Map(grouped.map((row) => [row.authorId, row._count._all]));
   }
 
   private async findOwnedOrFail(id: string, authorId: string): Promise<PostWithMedia> {

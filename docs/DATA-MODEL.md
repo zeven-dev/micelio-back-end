@@ -26,6 +26,7 @@ Cuenta de la aplicación e identidad social (Fase 0: registro con cédula/userna
 | role | enum `Role` @default(`USER`) | `USER \| TEACHER \| ADMIN \| SUPPORT`; solo un ADMIN lo cambia (`PATCH /api/admin/users/:id/role`) |
 | bio | string? | editable vía `PATCH /api/users/me` |
 | avatarKey | string? | key en S3; se sube vía `PATCH /api/users/me/avatar` (multipart) |
+| bannerKey | string? | Fase 4.5 — portada de la cabecera de perfil; mismo camino presign + confirm que el avatar (`banners/{userId}/{uuid}.ext`), y `DELETE /api/users/me/banner` la quita |
 | isPublic | boolean @default(`false`) | perfiles privados por defecto |
 | feedLayout | enum `FeedLayout` @default(`GRID`) | Fase 2 — ver "Ajustes de feed en User" |
 | feedColumns | int @default(`3`) | Fase 2 — 1–6 |
@@ -256,6 +257,61 @@ esta sección planificaba se implementaron sin desviarse (mismos campos, mismo �
 índice `(postId, parentId, createdAt)` en `Comment`). La única precisión que se sumó al
 implementar: el límite de longitud de `Comment.body` (1000 caracteres — `API-CONTRACTS.md` solo
 pedía "razonable", ver `PROCESSES.md` para el porqué del número).
+
+### Fase 4.5 — Banner de perfil y contadores — **implementado** (2026-09-07)
+Migración `20260907153925_add_user_banner_key`. `postsCount` no agregó ninguna columna: se
+cuenta con `PostsService.countByAuthorIds` (un `groupBy` por autor), que `users` consume por
+servicio público — el ciclo `users` ↔ `posts` que eso crea está en `ARCHITECTURE.md`
+(desviación 5).
+- **User.bannerKey** `string?`: key en S3 de la imagen de portada del perfil, hermana de
+  `avatarKey`. Se sube **directo a S3** con el mismo par presign + confirm del avatar
+  (`POST /api/users/me/banner/presign`, `PATCH /api/users/me/banner` con `{ key }`) — ver
+  "Subida directa a S3" en `API-CONTRACTS.md`. *Por qué una columna y no un `FileAsset`:* el
+  banner no es obra del usuario ni pertenece a su biblioteca (no se publica, no se organiza en
+  carpetas), exactamente el mismo razonamiento que ya se aplicó al avatar.
+- **Sin tabla nueva para los contadores.** `postsCount`/`notesCount`/`followersCount`/
+  `followingCount` de `UserPublic` se cuentan con `COUNT` sobre `posts` y `follows` en la misma
+  consulta del perfil. *Por qué no columnas denormalizadas:* un contador denormalizado hay que
+  mantenerlo consistente en cada alta/baja (y en cada cascade delete); a la escala actual el
+  `COUNT` con el índice `(authorId, position)` ya existente es barato y no puede desincronizarse.
+
+### Fase 4.6 — Notas (columnas de opinión)
+Las notas **no son una entidad paralela**: son un `Post` con `kind: NOTE`. Los campos que se
+agregan a `Post` son nulos en las publicaciones normales y viceversa.
+
+- **Enum PostKind**: `MEDIA | NOTE`. `MEDIA` es el default y describe todas las filas
+  existentes (la migración las rellena con `MEDIA`).
+- **Post.title** `string?`: obligatorio a nivel de DTO cuando `kind = NOTE` (máx 140), siempre
+  nulo cuando `kind = MEDIA`.
+- **PostBlock (`post_blocks`)**: cuerpo de la nota, un bloque por elemento.
+
+  | Campo | Tipo | Notas |
+  | --- | --- | --- |
+  | id | uuid PK | |
+  | postId | FK → Post | cascade delete |
+  | position | int | orden de lectura, 0-based y contiguo |
+  | type | enum `PostBlockType` | `PARAGRAPH \| HEADING \| QUOTE \| IMAGE` |
+  | text | string? | contenido de `PARAGRAPH`/`HEADING`/`QUOTE`; nulo en `IMAGE` |
+  | fileAssetId | FK → FileAsset? | solo en `IMAGE`; **`onDelete: Restrict`**, igual que `PostMedia` |
+  | caption | string? | pie de foto opcional de un bloque `IMAGE` |
+
+  Único `(postId, position)`. La imagen de un bloque sale de la **biblioteca** del autor, igual
+  que los medios de una publicación: no se duplica el binario y el borrado del archivo se
+  bloquea mientras esté publicado.
+- **Post.coverFileAssetId** `FK → FileAsset?` (`Restrict`): portada opcional de la nota, la que
+  se pinta en la tarjeta del home, del tab Notas y de la búsqueda. Nula en `kind = MEDIA`.
+
+*Por qué `kind` sobre `Post` y no una entidad `Note` propia:* el dueño del producto pidió que las
+notas se comporten "tal cual como si fueran una publicación" — likes, guardados, comentarios,
+compartir, home y búsqueda. Con una entidad aparte, cada una de esas cinco mecánicas necesitaría
+o tablas espejo (`NoteLike`, `SavedNote`, `NoteComment`…) o volver polimórficas las tres tablas
+de la Fase 4, y `ranking`, `notifications` y `search` tendrían que manejar dos formas para
+siempre. Con `kind`, todo eso ya funciona sin una línea nueva y el costo es acotado: cuatro
+columnas nulas y una tabla hija. Alternativas descartadas y su porqué, en `ARCHITECTURE.md`.
+
+*Qué NO comparte una nota con una publicación:* `position` (el orden curado del feed propio es
+solo de `MEDIA`; las notas se listan por `createdAt` descendente) y `PostMedia` (una nota usa
+`PostBlock`). El `PATCH /api/posts/reorder` rechaza ids de notas.
 
 ### Fase 5 — Afinidad y ranking (módulo `ranking`)
 - **UserAffinity**: `id, userId → User, targetUserId → User, score Float @default(0),

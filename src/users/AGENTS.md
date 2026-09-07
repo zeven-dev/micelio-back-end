@@ -4,7 +4,7 @@
 que otros módulos leen o escriben usuarios (nunca consultar la tabla `users` con Prisma desde
 otro módulo).
 
-## Contrato actual (Fase 0; avatar rehecho a subida directa en Fase 0.5)
+## Contrato actual (Fase 0; avatar a subida directa en 0.5; portada y `postsCount` en 4.5)
 - `GET /api/users/me` — `Me` completo (`UserPublic` + `email` + `role`); nunca incluye `cedula`.
 - `PATCH /api/users/me` — parcial `{ name?, bio?, isPublic?, feedSettings? }`. `feedSettings`
   es parcial dentro de parcial (`{ layout?, columns?, gap? }`, Fase 2): la clave ausente no se
@@ -19,6 +19,13 @@ otro módulo).
   se pasó del tope, borra el objeto y responde `413`), actualiza `avatarKey` y borra la key
   anterior. El backend **nunca** recibe el binario del avatar (se quitó `FileInterceptor`/Multer
   de este endpoint, y también el `MulterModule` que había quedado registrado en el módulo).
+- `POST /api/users/me/banner/presign`, `PATCH /api/users/me/banner`,
+  `DELETE /api/users/me/banner` (Fase 4.5) — portada de la cabecera de perfil. **Mismo camino
+  exacto** que el avatar, con prefijo `banners/{userId}/` y tope propio `UPLOAD_MAX_BANNER_MB`
+  (10 MB). Los dos comparten implementación (`presignProfileImage`/`confirmProfileImage`
+  parametrizados por un `ProfileImageSpec`): si agregas una tercera imagen de perfil, agrega una
+  spec, no otra copia del camino. El `DELETE` es idempotente y deja `bannerUrl: null` — un perfil
+  sin portada es un estado válido, a diferencia del avatar.
 - `GET /api/users/:username` — `UserPublic`; si el viewer no es el dueño y el perfil no es
   público, se omiten `bio` y `feedSettings`. **Autenticación opcional** (`@OptionalAuth()`):
   responde con o sin sesión, porque los perfiles se comparten por link (decisión #10 de
@@ -37,6 +44,14 @@ otro módulo).
     (follow mutuo); quien la llame no debería notar el cambio.
   - `getPublicViewsByIds(ids, viewerId?)` — `UserPublic` de varios usuarios de un golpe
     (evita una consulta y una firma de avatar por publicación).
+
+## Conteo de publicaciones (Fase 4.5)
+- `postsCount` de `UserPublic` lo aporta `PostsService.countByAuthorIds`: el conteo es un dato
+  de `posts`, así que este módulo **no** cuenta la tabla `posts` con Prisma (regla 7). Se pide
+  batched, una sola vez por página de perfiles, igual que el grafo.
+- Se devuelve **también** en la vista limitada de un perfil privado (dice cuánto hay, no qué hay).
+- `users` y `posts` se inyectan con `forwardRef` por el ciclo que esto crea — misma forma y misma
+  justificación que el ciclo con `social`; ver la desviación 5 de `docs/ARCHITECTURE.md`.
 
 ## Grafo social (Fase 3)
 - `followersCount`, `followingCount`, `viewerFollows` y `followsViewer` son **reales**: los

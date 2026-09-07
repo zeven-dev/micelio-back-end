@@ -20,6 +20,8 @@ export default () => ({
     maxAudioMb: parseInt(process.env.UPLOAD_MAX_AUDIO_MB ?? '50', 10),
     maxTextMb: parseInt(process.env.UPLOAD_MAX_TEXT_MB ?? '5', 10),
     maxAvatarMb: parseInt(process.env.UPLOAD_MAX_AVATAR_MB ?? '5', 10),
+    // El banner pesa más que el avatar porque es una imagen ancha de cabecera, no una miniatura.
+    maxBannerMb: parseInt(process.env.UPLOAD_MAX_BANNER_MB ?? '10', 10),
   },
   s3: {
     region: process.env.AWS_REGION,

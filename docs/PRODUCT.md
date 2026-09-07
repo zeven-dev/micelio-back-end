@@ -61,6 +61,11 @@ estar muy bien optimizada para móvil.
 
 ### Perfil y feed personal
 - Perfil tipo Instagram: descripción (bio), foto de perfil, feed propio.
+- **Cabecera de perfil tipo tarjeta** (decisión #14): **banner** de portada arriba, **foto de
+  perfil** circular montada sobre el borde del banner, y debajo el **nombre**, el **@username**,
+  la bio, el botón **seguir** y los contadores de **publicaciones, seguidos y seguidores**.
+- Debajo de la cabecera, el contenido del perfil vive en **tabs**: **Publicaciones**,
+  **Carpetas** y **Notas**.
 - El usuario **construye su feed a su gusto**: reordena sus publicaciones **arrastrándolas**
   (drag & drop) y las publicaciones pueden tener **tamaños diferentes**.
 - El dueño elige el **layout de su feed**: **cuadrícula o masonry**, con **1 a 6 columnas** y
@@ -82,8 +87,19 @@ estar muy bien optimizada para móvil.
 - **Guardar** publicaciones de otros usuarios para verlas después.
 - **Compartir** publicaciones por chat.
 
+### Notas (columnas de opinión)
+- Una **nota** es una publicación de **texto largo**, con el aire de una columna de opinión de
+  periódico: **título**, cuerpo por párrafos y **imágenes intercaladas** en el texto.
+- Se comportan **igual que una publicación**: se puede **comentar** (misma caja de comentarios
+  anidados), dar **me gusta**, **guardar** y **compartir**.
+- Aparecen en tres lugares: el tab **Notas** del perfil de su autor, el **home** (mezcladas con
+  las publicaciones, mismo algoritmo de feed) y la **búsqueda** (título, texto y etiquetas).
+- Llevan **etiquetas** como las publicaciones y alimentan igual la búsqueda y el ranking.
+- **No** entran en la cuadrícula curada del perfil: el orden del feed propio (drag & drop,
+  layout, columnas) es de las publicaciones con medios; las notas se listan por fecha.
+
 ### Home
-- Espacio tipo Instagram/Tumblr con publicaciones de los usuarios: alimentado por los
+- Espacio tipo Instagram/Tumblr con publicaciones **y notas** de los usuarios: alimentado por los
   **seguidos** (con prioridad a los **favoritos**) + descubrimiento de perfiles públicos.
 - **Ranking personalizado por interacciones:** si X da likes, comenta, guarda o comparte
   contenido de Y — lo siga o no —, Y gana relevancia en el home de X; igual con las etiquetas
@@ -113,7 +129,7 @@ estar muy bien optimizada para móvil.
 
 ### Búsqueda
 - Búsqueda de **usuarios** (por username/nombre) y de **palabras clave** en descripciones y
-  etiquetas de publicaciones.
+  etiquetas de publicaciones, y en **título y texto de las notas**.
 - La sección de búsqueda (como la de Instagram) también muestra los ítems del market, filtrables
   por categoría.
 - **Explore:** antes de escribir, la sección muestra una cuadrícula de descubrimiento
@@ -130,9 +146,18 @@ estar muy bien optimizada para móvil.
 
 El diseño debe quedar centralizado en tokens para que un ajuste grande sea trivial:
 
-- **Color principal:** `#222222`
-- **Color secundario:** `#ffbe09`
-- **Complementarios:** `#FF2F2F`, `#2176FF`
+**Paleta vigente desde el 2026-09-07** (decisión #15; reemplaza a la anterior
+`#222222`/`#ffbe09`/`#FF2F2F`/`#2176FF`). Seis colores con nombre propio:
+
+| Nombre | Hex | Pantone | Papel |
+| --- | --- | --- | --- |
+| Black | `#1D2121` | 426C | Fondo base / superficie principal (Modern Dark) |
+| White | `#ECE9E9` | 9043C | Texto y superficies claras |
+| Volt | `#B9ED00` | 809C | Acento principal: acciones, resaltados, energía |
+| Lean | `#7182CB` | 271C | Complementario frío: enlaces, información |
+| Heat | `#FF6716` | 1585C | Complementario cálido: likes/corazón, alertas |
+| Grey | `#CECECE` | 427C | Neutro: bordes, texto secundario sobre claro |
+
 - **Tipografías:** Poppins (principal), Montserrat (secundaria)
 - **Estilo:** Modern Dark con Glassmorphism; color dinámico "vivo" — degradados en movimiento en
   bordes y elementos resaltados.
@@ -171,6 +196,24 @@ El diseño debe quedar centralizado en tokens para que un ajuste grande sea triv
 12. **Comentarios anidados desde el inicio:** `Comment` lleva `parentId` para respuestas en
     hilo, no una lista plana. Se decidió antes de crear la entidad para no pagar una migración
     después.
+
+13. **Notas = publicaciones de texto largo (2026-09-07):** el usuario puede escribir columnas de
+    opinión con título, párrafos e imágenes intercaladas. Se comportan **exactamente como una
+    publicación** (comentarios, likes, guardados, compartir, home, búsqueda, ranking) y viven en
+    un **tab propio** del perfil, junto a Publicaciones y Carpetas. Técnicamente **no son una
+    entidad nueva paralela**: son un `Post` con `kind: NOTE` (ver `DATA-MODEL.md` y
+    `ARCHITECTURE.md` para el porqué de esa decisión y las alternativas descartadas).
+14. **Cabecera de perfil rediseñada (2026-09-07):** el perfil pasa a una tarjeta con **banner**
+    de portada, avatar circular montado sobre el borde del banner, nombre, `@username`, bio,
+    botón seguir y **tres contadores**: publicaciones, seguidos y seguidores. El conteo de
+    publicaciones ya no se omite — el back lo agrega a `UserPublic` (`postsCount`, `notesCount`),
+    así que deja de ser un dato inventado. El banner es un archivo propio del usuario, subido
+    directo a S3 igual que el avatar.
+15. **Paleta nueva (2026-09-07):** se reemplazan los cuatro colores originales por los seis de la
+    tabla de "Diseño" (Black, White, Volt, Lean, Heat, Grey). Como todo valor visual vive en
+    `micelio-front-end/docs/design-tokens.json`, el cambio es la edición de ese archivo más la
+    regeneración de tokens en los dos clientes — exactamente el "ajuste grande trivial" que el
+    sistema de diseño prometía.
 
 ## Preguntas abiertas (pendientes del dueño del producto)
 

@@ -36,11 +36,18 @@ commit — de lo contrario el contrato exportado queda desincronizado de esta pr
 ```json
 {
   "id": "uuid", "username": "string", "name": "string",
-  "avatarUrl": "string|null", "isPublic": true,
+  "avatarUrl": "string|null", "bannerUrl": "string|null", "isPublic": true,
+  "postsCount": 0, "notesCount": 0,
   "followersCount": 0, "followingCount": 0,
   "viewerFollows": false, "followsViewer": false
 }
 ```
+`bannerUrl` (Fase 4.5) es la portada de la cabecera del perfil: URL firmada como `avatarUrl`,
+`null` si el usuario no subió ninguna (el cliente pinta entonces su superficie de fondo, no una
+imagen de relleno). `postsCount` (Fase 4.5) cuenta las publicaciones con `kind: MEDIA` y
+`notesCount` (Fase 4.6) las de `kind: NOTE`; ambos son **siempre visibles**, incluso en la vista
+limitada de un perfil privado — igual que los contadores del grafo, dicen *cuánto* hay sin
+revelar *qué* hay.
 Si el perfil es **privado sin follow mutuo** con el viewer, esto es TODO lo que se devuelve
 (sin bio, sin posts, sin feed settings). Con acceso (público, o mutuo, o es el propio) se
 agrega:
@@ -71,7 +78,7 @@ La **cédula nunca se devuelve** en ninguna respuesta, ni siquiera en `me`.
 ### Post
 ```json
 {
-  "id": "uuid", "author": UserPublic, "description": "string|null",
+  "id": "uuid", "kind": "MEDIA|NOTE", "author": UserPublic, "description": "string|null",
   "tags": ["string"], "position": 0, "createdAt": ISO,
   "media": [ { "id": "uuid", "order": 0, "type": "IMAGE|VIDEO|AUDIO|TEXT",
                "url": "string", "expiresAt": ISO, "width": 0, "height": 0 } ],
@@ -79,6 +86,10 @@ La **cédula nunca se devuelve** en ninguna respuesta, ni siquiera en `me`.
   "likeCount": 0, "commentCount": 0
 }
 ```
+`kind` (Fase 4.6) distingue una publicación de medios de una **nota**. En `kind: "MEDIA"` la
+forma es exactamente la de arriba. En `kind: "NOTE"` se **omiten** `media` y `position`, y se
+agregan los campos de "Notas — Fase 4.6". Un cliente que no conozca las notas debe ignorar los
+`Post` con `kind` desconocido en vez de romperse.
 `likeCount` **solo** se incluye cuando el viewer es el autor; para cualquier otro viewer el
 campo **se omite** (no se manda en 0 — se omite). `width`/`height` son necesarios para el
 masonry de los clientes: salen del **archivo de biblioteca** (se declaran al subirlo, ver
@@ -175,7 +186,55 @@ Acepta parcial: `{ "feedSettings": { "layout"?, "columns"?, "gap"? } }` además 
 `name?, bio?, isPublic?`. Validación: `columns` entero 1–6; `gap` entero 0–5;
 `layout` ∈ {GRID, MASONRY}. Avatar aparte: ver "Subida directa a S3" abajo.
 
-### Subida directa a S3 (Fase 0.5) — biblioteca y avatar
+### Notas — Fase 4.6
+
+Una nota es un `Post` con `kind: "NOTE"`: **mismos** endpoints de like, guardado, comentarios y
+compartir, misma presencia en `GET /api/feed` y en la búsqueda. Solo cambia el cuerpo.
+
+Forma de un `Post` con `kind: "NOTE"` (reemplaza `media`/`position` de la forma base):
+```json
+{ "kind": "NOTE", "title": "string", "excerpt": "string",
+  "cover": { "url": "string", "expiresAt": ISO, "width": 0, "height": 0 } | null,
+  "blocks": [ { "position": 0, "type": "PARAGRAPH|HEADING|QUOTE|IMAGE",
+                "text": "string|null", "caption": "string|null",
+                "image": { "url": "string", "expiresAt": ISO, "width": 0, "height": 0 } | null } ] }
+```
+
+| Endpoint | Body | Respuesta |
+| --- | --- | --- |
+| `POST /api/posts/notes` | `{ title, tags?, coverFileAssetId?, blocks: [...] }` | `Post` (`kind: NOTE`) |
+| `PATCH /api/posts/notes/:id` | mismo body, parcial | `Post` (`kind: NOTE`) |
+| `GET /api/users/:username/notes?cursor=&limit=` | — | paginado estándar de `Post` (`kind: NOTE`) |
+
+- `GET /api/posts/:id` y `DELETE /api/posts/:id` sirven para ambos `kind` sin cambios: una nota
+  **es** un post. Los endpoints de creación/edición sí son propios porque el cuerpo es otro; un
+  `PATCH /api/posts/:id` con `media` sobre una nota responde `400`.
+- **`blocks` es el orden**: el índice en el arreglo se persiste como `position`. Entre 1 y 100
+  bloques. Reglas por tipo:
+  - `PARAGRAPH` / `QUOTE`: `text` obligatorio, máx 5000 caracteres; `fileAssetId` prohibido.
+  - `HEADING`: `text` obligatorio, máx 140 caracteres.
+  - `IMAGE`: `fileAssetId` obligatorio y `text` prohibido; `caption` opcional (máx 280). El
+    archivo debe ser de la **biblioteca del autor** y de tipo `IMAGE` (`404`/`403`/`400`).
+- `title` obligatorio, 1–140 caracteres. `tags` con la **misma** normalización de las
+  publicaciones (máx 10; los `#hashtags` del `title` y de los bloques de texto también cuentan).
+- `excerpt` lo **deriva el servidor**, no lo manda el cliente: los primeros 200 caracteres del
+  primer bloque `PARAGRAPH`, cortados en palabra completa. Es lo que pintan la tarjeta del home,
+  el tab Notas y la búsqueda. *Por qué en el servidor:* dos clientes cortando texto por su cuenta
+  producen dos resúmenes distintos de la misma nota.
+- `coverFileAssetId` opcional; si falta, `cover` es `null` y la tarjeta usa la primera imagen de
+  `blocks`, y si tampoco hay, una tarjeta solo de texto. Nunca una imagen de relleno.
+- **`PATCH` es parcial**, pero `blocks` presente **reemplaza la lista completa** (no hay deltas),
+  igual que `media` en publicaciones y que `orderedIds` en el reordenamiento.
+- **`PATCH /api/posts/reorder` rechaza notas**: el orden curado del feed propio es de las
+  publicaciones `MEDIA`. Si `orderedIds` trae el id de una nota, `400`. Las notas se listan
+  siempre por `createdAt` descendente, desempate `id` descendente.
+- **Visibilidad**: exactamente la misma regla que las publicaciones (autor siempre; los demás
+  solo si el perfil es público o hay follow mutuo). No hay reglas de privacidad propias de notas.
+- **Home feed**: `GET /api/feed` incluye notas mezcladas con publicaciones, con el mismo
+  algoritmo y el mismo cursor — para el algoritmo una nota es un post más, con su `createdAt` y
+  su autor. Los clientes ya deduplican por `id`, así que la respuesta no cambia de forma.
+
+### Subida directa a S3 (Fase 0.5) — biblioteca y avatar; banner (Fase 4.5)
 Los binarios **nunca** pasan por el backend: el cliente sube directo a S3 con una URL firmada
 de escritura; el backend solo entrega la URL y confirma después de que el objeto ya existe en
 el bucket. Patrón idéntico en ambos recursos, dos pasos:
@@ -186,6 +245,9 @@ el bucket. Patrón idéntico en ambos recursos, dos pasos:
      `{ "key": "string", "uploadUrl": "string", "expiresIn": number }`.
    - Avatar: `POST /api/users/me/avatar/presign` body `{ "mimeType": "string", "size": number }`
      → misma forma de respuesta.
+   - Banner (Fase 4.5): `POST /api/users/me/banner/presign`, **mismo body y misma respuesta que
+     el avatar**; mismos mimeTypes (JPEG/PNG/WEBP) y su propio tope `UPLOAD_MAX_BANNER_MB`
+     (10 MB por defecto — pesa más que un avatar porque es una imagen ancha).
    - Valida propiedad de la carpeta (biblioteca), mimeType permitido y el tamaño declarado
      contra el tope configurado del tipo (`UPLOAD_MAX_*_MB`; en avatar además solo
      JPEG/PNG/WEBP, con su propio `UPLOAD_MAX_AVATAR_MB`), y genera la `key` (mismo prefijo que
@@ -204,6 +266,10 @@ el bucket. Patrón idéntico en ambos recursos, dos pasos:
      midiendo nunca debe impedir una subida.
    - Avatar: `PATCH /api/users/me/avatar` body `{ "key": "string" }` → `Me` (sin cambios de
      forma).
+   - Banner (Fase 4.5): `PATCH /api/users/me/banner` body `{ "key": "string" }` → `Me`. Para
+     **quitar** la portada: `DELETE /api/users/me/banner` → `Me` con `bannerUrl: null` (el
+     avatar no tiene equivalente porque siempre hay un avatar por defecto en la UI; una portada
+     vacía sí es un estado válido y querido).
    - El backend verifica con `HeadObject` que el objeto **ya existe** en S3 antes de crear el
      registro (`404` si no); también verifica que la `key` tenga el prefijo esperado del dueño
      (`403` si no) — evita que un cliente registre metadatos de un archivo que nunca subió o de
@@ -222,7 +288,7 @@ en el backend — se configura directamente en el bucket.
 ### Límites de subida
 Solo por **peso**, nunca por duración (decisión #11 de `PRODUCT.md`). Los topes viven en
 variables de entorno (`UPLOAD_MAX_IMAGE_MB`, `UPLOAD_MAX_VIDEO_MB`, `UPLOAD_MAX_AUDIO_MB`,
-`UPLOAD_MAX_TEXT_MB`, `UPLOAD_MAX_AVATAR_MB`), así que el cliente **no debe hardcodearlos**: si
+`UPLOAD_MAX_TEXT_MB`, `UPLOAD_MAX_AVATAR_MB`, `UPLOAD_MAX_BANNER_MB`), así que el cliente **no debe hardcodearlos**: si
 excede, la API responde `413` con el mensaje exacto y el límite vigente en MB
 (p. ej. `El archivo supera el tamaño máximo permitido para imagen (15 MB)`).
 
@@ -235,7 +301,8 @@ Tipos aceptados en la biblioteca (`FileType` se deriva del `mimeType`, el client
 | `AUDIO` | `audio/mpeg`, `audio/mp4`, `audio/aac`, `audio/wav`, `audio/x-wav`, `audio/ogg`, `audio/webm`, `audio/flac` | 50 MB |
 | `TEXT` | `text/plain`, `text/markdown`, `text/csv` | 5 MB |
 
-El avatar acepta solo `image/jpeg`, `image/png`, `image/webp` (5 MB por defecto).
+El avatar acepta solo `image/jpeg`, `image/png`, `image/webp` (5 MB por defecto); el banner los
+mismos tres (10 MB por defecto).
 
 ### Carpetas y sub-carpetas — Fase 1
 La biblioteca es un **árbol**: una carpeta puede colgar de otra (`parentId`). Se navega nivel a
@@ -331,10 +398,16 @@ Los cuatro campos sociales de `UserPublic` (`followersCount`, `followingCount`,
 de un perfil privado (con `bio` y `feedSettings`) se abre con **follow mutuo**.
 
 ### Búsqueda — `GET /api/search?q=&type=&category=&cursor=&limit=`
-`type` ∈ {`users`,`posts`,`market`} (obligatorio, una a la vez — los clientes usan tabs).
+`type` ∈ {`users`,`posts`,`notes`,`market`} (obligatorio, una a la vez — los clientes usan tabs).
 Respuesta: paginado estándar de `UserPublic` | `Post` | `MarketItem` según `type`.
 `category` solo aplica con `type=market`. Solo devuelve contenido que pasa la regla de
 visibilidad del viewer.
+
+`type=posts` busca en `description` y `tags` de las publicaciones `kind: MEDIA`; `type=notes`
+(Fase 4.6) busca en `title`, el texto de los bloques y `tags` de las de `kind: NOTE`, y devuelve
+`Post` con esa forma. *Por qué dos tipos y no uno solo:* el usuario que busca una columna de
+opinión y el que busca una imagen no buscan lo mismo, y los clientes ya presentan los resultados
+en tabs; mezclarlos obligaría a rankear dos formas de contenido incomparables en una sola lista.
 
 ## `GET /api/feed` — algoritmo del home (especificación exacta)
 

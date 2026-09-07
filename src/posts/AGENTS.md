@@ -104,6 +104,10 @@ Formas exactas en `docs/API-CONTRACTS.md` ("Likes — Fase 4", "Guardados — Fa
 - `findManyByIdsForViewer(ids, viewerId)` — el `Post` completo (armado igual que cualquier otra
   lectura, medios firmados incluidos) para varios ids a la vez; hoy solo lo usa `listSaved` (uso
   interno al propio módulo, ya no cruza a `social`).
+- `countByAuthorIds(authorIds)` (Fase 4.5) — cuántas publicaciones tiene cada autor, en un solo
+  `groupBy`. Lo consume `users` para el `postsCount` de la cabecera de perfil, en vez de contar
+  esta tabla por su cuenta. Los autores sin publicaciones **no salen** del `groupBy`: quien
+  llama resuelve la ausencia como `0`.
 
 ## Ciclo con `social` — historia
 Durante la Fase 4, like/guardar/comentar se implementaron en `social` (por instrucción de su
@@ -120,6 +124,14 @@ tampoco hizo falta más, por la misma razón. El ciclo real que queda en el proy
 `users` ↔ `social` (independiente de este módulo, sin cambios). Detalle completo en
 `docs/ARCHITECTURE.md` y `docs/PROCESSES.md` ("Ciclo `posts` ↔ `social`", en "Procesos
 eliminados").
+
+**Actualización (Fase 4.5, 2026-09-07):** el borde `posts → users` **volvió** a necesitar
+`forwardRef`, pero por una razón distinta y legítima: el perfil ahora muestra `postsCount`, así
+que `users` depende de este módulo (`countByAuthorIds`) además de que este módulo dependa de
+`users` (el autor de cada post). Es un ciclo real de **dos**, de la misma forma que el que
+`users` ya tiene con `social`, no el de tres que se deshizo. `social` sigue sin depender de
+`posts`. `forwardRef` aparece en `PostsService` y en `PostInteractionsService`, las dos puntas
+que inyectan `UsersService` desde aquí. Ver la desviación 5 de `docs/ARCHITECTURE.md`.
 
 ## Pendiente (fases siguientes, no improvisar aquí)
 - **Feed v2** (Fase 5): el mismo endpoint gana los boosts por afinidad. La respuesta y el cursor

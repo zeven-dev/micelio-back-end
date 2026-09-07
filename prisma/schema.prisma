@@ -37,6 +37,9 @@ model User {
   role         Role     @default(USER)
   bio          String?
   avatarKey    String?
+  // Portada de la cabecera de perfil (Fase 4.5). Columna y no `FileAsset`: la portada no es obra
+  // del usuario ni vive en su biblioteca — mismo razonamiento que el avatar.
+  bannerKey    String?
   isPublic     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt

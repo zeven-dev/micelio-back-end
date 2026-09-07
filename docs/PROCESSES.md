@@ -29,6 +29,12 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   sincronía con los decoradores Swagger, no solo con la prosa. Endpoints sin DTO de respuesta hoy
   (ver `STATUS.md` — `folders`, `/health`, `/auth/logout`, `/admin/users/:id/role`): quedan fuera
   del export hasta que se les dé DTO.
+- **Trampa conocida (2026-09-07):** el script bootea el `AppModule` real, así que **necesita un
+  `.env` válido** (`DATABASE_URL`, secretos JWT, config de S3); sin él, `ConfigModule` aborta.
+  Como `main()` no captura la promesa, el script muere **sin imprimir nada** —`logger: false`— y
+  deja `docs/openapi.json` con el contenido viejo. Si el export "corre bien" pero el JSON no
+  cambia, es esto: revisa que exista `.env` (copia de `.env.example`) antes de sospechar del
+  contrato. El mismo booteo real es, de paso, la verificación de que el grafo de módulos arranca.
 
 ### Registro de usuario
 - **Módulos:** `src/auth`, `src/users`
@@ -90,11 +96,12 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   módulos. El resto sigue siendo scaffold — sus productores llegan con `social`/`chat`
   (Fases 3, 4 y 6).
 
-### Perfil de usuario (Fase 0; avatar rehecho a subida directa en Fase 0.5)
-- **Módulos:** `src/users`, `src/storage`
+### Perfil de usuario (Fase 0; avatar a subida directa en 0.5; portada y `postsCount` en 4.5)
+- **Módulos:** `src/users`, `src/storage`, `src/posts` (solo para el conteo)
 - **Disparadores:** `GET /api/users/me`, `PATCH /api/users/me`,
   `POST /api/users/me/avatar/presign`, `PATCH /api/users/me/avatar` (JSON `{ key }`),
-  `GET /api/users/:username`
+  `POST /api/users/me/banner/presign`, `PATCH /api/users/me/banner`,
+  `DELETE /api/users/me/banner`, `GET /api/users/:username`
 - **Pasos:** `GET/PATCH /me` operan sobre el propio usuario del token; el avatar sube **directo
   a S3** desde el cliente (ver "Subida directa a S3" abajo) — `presign` valida tipo/tamaño
   (`image/jpeg|png|webp`, tope propio `UPLOAD_MAX_AVATAR_MB`, 5 MB por defecto) y devuelve una
@@ -110,6 +117,17 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   desde la Fase 2 (ver "Ajustes de presentación del feed"). `GET /api/users/:username` es
   `@OptionalAuth()` desde la decisión #10 de `PRODUCT.md` (perfiles públicos navegables por
   link); el resto de la API sigue exigiendo sesión.
+- **Portada (Fase 4.5):** mismo camino exacto del avatar (presign → `PUT` a S3 → confirm con
+  `HeadObject` y revalidación del tamaño real), con prefijo `banners/{userId}/` y tope propio
+  `UPLOAD_MAX_BANNER_MB` (10 MB). Los dos caminos ya no están escritos dos veces: viven en
+  `presignProfileImage`/`confirmProfileImage` de `UsersService`, parametrizados por un
+  `ProfileImageSpec` (prefijo, columna, clave de tope, etiqueta del mensaje de error) — tenerlos
+  duplicados era la forma segura de que se desviaran. `DELETE /me/banner` es idempotente: sin
+  portada no escribe ni borra nada.
+- **`postsCount` (Fase 4.5):** lo pide `UsersService` a `PostsService.countByAuthorIds` (un
+  `groupBy` por autor, batched para toda la página cuando se arman varias vistas de usuario).
+  Se devuelve **también** en la vista limitada de un perfil privado: dice cuánto hay, no qué hay.
+  El ciclo `users` ↔ `posts` que introduce está documentado en `ARCHITECTURE.md` (desviación 5).
 
 ### Login / Refresh / Logout
 - **Módulos:** `src/auth`

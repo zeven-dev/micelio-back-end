@@ -67,6 +67,39 @@ aislados, infraestructura intercambiable — se logra con las reglas de abajo.
    de tres) tampoco hizo falta más — se confirmó arrancando el `AppModule` real
    (`npm run api:export`) sin él. El único ciclo real que queda es el de la entrada 2
    (`users` ↔ `social`), sin cambios.
+4. **Las notas viven en `posts`, no en un módulo `notes` propio** (Fase 4.6, decidido 2026-09-07
+   con el dueño del producto). Una nota es un `Post` con `kind: NOTE` (ver `DATA-MODEL.md`). La
+   regla 7 de `AGENTS.md` —un dominio por carpeta— sugeriría un módulo aparte; se decidió que
+   una nota **no es otro dominio**: es el mismo dominio "contenido publicado por un usuario" con
+   otra forma de cuerpo, y el dueño lo pidió explícitamente comportándose "tal cual como si
+   fueran una publicación".
+   - *Alternativa A — módulo `notes` con tablas espejo* (`NoteLike`, `SavedNote`, `NoteComment`):
+     duplica las tres mecánicas de la Fase 4 y obliga a `ranking`, `notifications`, `search` y el
+     home a manejar dos formas para siempre. Descartada por costo permanente.
+   - *Alternativa B — volver polimórficas las tablas de la Fase 4* (`subjectType` + `subjectId`,
+     o `postId`/`noteId` nulables con CHECK): pierde la integridad referencial simple que hoy
+     tienen `Like`/`SavedPost`/`Comment` y exige migrar datos existentes. Descartada por riesgo
+     desproporcionado frente al beneficio.
+   - *Costo aceptado de la opción elegida:* `Post` gana columnas que solo aplican a un `kind`
+     (`title`, `coverFileAssetId`) y otras que solo aplican al otro (`position`, `PostMedia`).
+     Se mitiga en la capa de servicio: `PostsService` valida por `kind` y los listados del perfil
+     filtran por `kind`, de modo que ningún cliente ve campos que no le corresponden.
+5. **`users` ↔ `posts` vuelve a ser un ciclo, con `forwardRef`** (Fase 4.5, 2026-09-07). La
+   cabecera de perfil muestra `postsCount`, que es un dato de `posts`; los posts embeben el
+   `UserPublic` de su autor, que es un dato de `users`. Es la **misma forma** del ciclo real que
+   la entrada 2 ya acepta para `users` ↔ `social` (el perfil muestra conteos del grafo y el grafo
+   arma vistas de usuario), y se resuelve igual: el cruce es por **servicio público**
+   (`PostsService.countByAuthorIds`), nunca por las tablas del otro módulo, y `forwardRef` es
+   solo cómo NestJS ordena la carga. Aparece en tres puntos de inyección: `UsersService →
+   PostsService`, `PostsService → UsersService` y `PostInteractionsService → UsersService`.
+   - *Esto no reabre el ciclo de tres módulos de la entrada 3:* aquel era `users` ↔ `social` ↔
+     `posts` con la lógica de interacciones en el módulo equivocado. `social` sigue sin depender
+     de `posts`, así que el grafo se mantiene con dos ciclos de dos, ambos por la misma razón
+     legítima (el perfil agrega datos de otros dominios).
+   - *Alternativa descartada — contador denormalizado en `User`:* quitaría el ciclo, pero hay que
+     mantenerlo consistente en cada alta, baja y cascade delete, y un contador que se desincroniza
+     miente en la cara del usuario. El `COUNT` agrupado usa el índice `(authorId, position)` que
+     ya existe y no puede desincronizarse.
 
 ## `notifications`: módulo aislado y extraíble
 

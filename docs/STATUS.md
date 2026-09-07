@@ -105,6 +105,68 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-07 — Notas y rediseño de perfil: planeación + Fase 4.5 (cierre de fase)
+- **Listo (planeación, tres repos):** el dueño del producto pidió tres cosas — notas tipo
+  columna de opinión, cabecera de perfil rediseñada (banner + contadores) y paleta nueva — y las
+  tres quedaron **especificadas antes de tocar código**:
+  - `PRODUCT.md` (canónico + las dos copias, sincronizadas y verificadas por diff): decisiones
+    **#13** (notas), **#14** (cabecera de perfil) y **#15** (paleta), más la sección de notas en
+    "Funcionalidades" y la tabla de la paleta con sus Pantone.
+  - `ROADMAP.md` de los tres repos: **Fase 4.5** (paleta + perfil) y **Fase 4.6** (notas), en ese
+    orden y no al revés — el tab Notas vive en la cabecera nueva, así que construir las notas
+    primero obligaría a rehacer su UI en la 4.5. Se usaron fases fraccionarias en vez de
+    renumerar: "Fase 5 = ranking" está referenciada en decenas de sitios y el precedente de la
+    Fase 0.5 ya existía.
+  - `API-CONTRACTS.md`: `bannerUrl`/`postsCount`/`notesCount` en `UserPublic`, presign+confirm
+    del banner, `kind` en `Post`, la forma completa de una nota (`title`, `excerpt`, `cover`,
+    `blocks`) y sus tres endpoints, notas en el home feed y `type=notes` en la búsqueda.
+  - `DATA-MODEL.md` y `ARCHITECTURE.md`: `User.bannerKey`, `PostKind`, `PostBlock`,
+    `Post.title`/`coverFileAssetId`, y la **desviación 4** con las dos alternativas descartadas
+    para las notas.
+- **Decisión de diseño de las notas (la que más importa revisar):** una nota **no** es una
+  entidad nueva, es un `Post` con `kind: NOTE`. El dueño las pidió "tal cual como si fueran una
+  publicación" (comentar, like, guardar, compartir, home, búsqueda); con una entidad aparte, cada
+  una de esas mecánicas necesitaría tablas espejo o volver polimórficas las tres tablas de la
+  Fase 4, y `ranking`, `notifications` y `search` cargarían con dos formas para siempre. El costo
+  aceptado —columnas nulas según el `kind`— está acotado en la capa de servicio. Todo el
+  razonamiento, en `ARCHITECTURE.md` (desviación 4).
+- **Listo (Fase 4.5, back-end):**
+  - `bannerKey` en `User` (migración `20260907153925_add_user_banner_key`) +
+    `POST /api/users/me/banner/presign`, `PATCH /api/users/me/banner`,
+    `DELETE /api/users/me/banner`. Avatar y portada **dejaron de estar escritos dos veces**:
+    comparten `presignProfileImage`/`confirmProfileImage` parametrizados por un
+    `ProfileImageSpec` (prefijo, columna, tope, etiqueta). Los mensajes de error del avatar no
+    cambiaron.
+  - `bannerUrl` y `postsCount` en `UserPublic`. El conteo lo aporta
+    `PostsService.countByAuthorIds` (un `groupBy`, batched por página) — `users` no cuenta la
+    tabla `posts` por su cuenta. Ambos campos se devuelven también en la vista limitada de un
+    perfil privado: dicen cuánto hay, no qué hay.
+  - `UPLOAD_MAX_BANNER_MB` (10 MB) en `env.validation.ts`, `configuration.ts` y `.env.example`.
+  - `docs/openapi.json` regenerado con las dos rutas nuevas y los dos campos nuevos.
+  - Verificación corrida por mí, no reportada por un hijo: `npm run lint`, `npm run build`,
+    `npm test` (**10 suites, 164 tests**, 12 nuevos entre portada y `postsCount`) y
+    `npm run api:export`, con `paths` y `components.schemas.UserPublicView` inspeccionados en el
+    JSON resultante. Las migraciones se generaron contra un Postgres real, no a mano.
+- **Desviación arquitectónica que hay que revisar:** `users` ↔ `posts` volvió a ser un ciclo
+  (`forwardRef` en tres puntos de inyección), porque el perfil ahora agrega un dato de `posts`.
+  **No** es el ciclo de tres módulos que se deshizo el 2026-09-03: `social` sigue sin depender de
+  `posts`, y este es exactamente la misma forma del ciclo `users` ↔ `social` que la desviación 2
+  ya acepta. La alternativa sin ciclo era un contador denormalizado en `User`, descartada porque
+  un contador que se desincroniza le miente al usuario. Anotada como **desviación 5** en
+  `ARCHITECTURE.md`.
+- **Trampa encontrada y documentada:** `npm run api:export` bootea el `AppModule` real, así que
+  **necesita `.env`**; sin él muere sin imprimir nada (`logger: false` + promesa sin `catch`) y
+  deja `docs/openapi.json` viejo. Pasó en esta misma tarea y costó un rato de desconcierto — ya
+  está en `PROCESSES.md` ("Exportación del contrato"). Vale la pena arreglar el script para que
+  falle ruidosamente; no se hizo aquí para no mezclarlo con la fase.
+- **Falta:** la Fase 4.6 completa (notas) en este repo, y la parte de clientes de la 4.5
+  (cabecera de perfil, subida de banner) en `micelio-front-end` y `micelio-app`.
+- **Necesito:** que el dueño del producto confirme dos cosas antes de la 4.6 — (1) el diseño de
+  notas como `Post` con `kind` en vez de entidad propia, y (2) que el orden 4.5 → 4.6 (perfil
+  antes que notas) es el que quiere; si prefiere las notas primero, hay retrabajo de UI.
+- **Sigue:** la parte de clientes de la Fase 4.5 (`sync:api` ya puede correrse: el contrato está
+  exportado). Después, Fase 4.6 en este repo.
+
 ### 2026-09-02 — Protocolo de orquestación jefe+hijos (tarea, proceso entre repos)
 - **Listo:** `docs/ORCHESTRATION.md` — protocolo para ejecutar una fase en los tres repos con
   supervisión mínima del dueño: back-end siempre primero (contrato cerrado y exportado antes de

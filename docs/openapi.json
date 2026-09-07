@@ -154,6 +154,102 @@
         ]
       }
     },
+    "/users/me/banner/presign": {
+      "post": {
+        "operationId": "UsersController_presignBanner",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignAvatarDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignAvatarResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/me/banner": {
+      "patch": {
+        "operationId": "UsersController_updateBanner",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmAvatarDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "UsersController_removeBanner",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeView"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/users/{username}": {
       "get": {
         "operationId": "UsersController_getByUsername",
@@ -416,470 +512,6 @@
         },
         "tags": [
           "social"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/auth/register": {
-      "post": {
-        "operationId": "AuthController_register",
-        "parameters": [
-          {
-            "name": "x-client-type",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/login": {
-      "post": {
-        "operationId": "AuthController_login",
-        "parameters": [
-          {
-            "name": "x-client-type",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/refresh": {
-      "post": {
-        "operationId": "AuthController_refresh",
-        "parameters": [
-          {
-            "name": "x-client-type",
-            "required": true,
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/auth/logout": {
-      "post": {
-        "operationId": "AuthController_logout",
-        "parameters": [],
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LogoutResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "auth"
-        ]
-      }
-    },
-    "/folders": {
-      "get": {
-        "operationId": "FoldersController_findAll",
-        "parameters": [
-          {
-            "name": "parentId",
-            "required": false,
-            "in": "query",
-            "description": "Carpeta madre. Omitirlo lista las carpetas raíz.",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FolderResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "operationId": "FoldersController_create",
-        "parameters": [],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateFolderDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FolderResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{id}": {
-      "get": {
-        "operationId": "FoldersController_findOne",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FolderDetailResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "patch": {
-        "operationId": "FoldersController_update",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/UpdateFolderDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FolderResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "delete": {
-        "operationId": "FoldersController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "folders"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{folderId}/files": {
-      "get": {
-        "operationId": "FilesController_findAll",
-        "parameters": [
-          {
-            "name": "folderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/FileResponseDto"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "files"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{folderId}/files/presign": {
-      "post": {
-        "operationId": "FilesController_presign",
-        "parameters": [
-          {
-            "name": "folderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PresignFileDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PresignResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "files"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/folders/{folderId}/files/confirm": {
-      "post": {
-        "operationId": "FilesController_confirm",
-        "parameters": [
-          {
-            "name": "folderId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ConfirmFileDto"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FileResponseDto"
-                }
-              }
-            }
-          }
-        },
-        "tags": [
-          "files"
-        ],
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/files/{id}": {
-      "delete": {
-        "operationId": "FilesController_remove",
-        "parameters": [
-          {
-            "name": "id",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "files"
         ],
         "security": [
           {
@@ -1703,6 +1335,470 @@
         ]
       }
     },
+    "/folders/{folderId}/files": {
+      "get": {
+        "operationId": "FilesController_findAll",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FileResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files/presign": {
+      "post": {
+        "operationId": "FilesController_presign",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{folderId}/files/confirm": {
+      "post": {
+        "operationId": "FilesController_confirm",
+        "parameters": [
+          {
+            "name": "folderId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmFileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/files/{id}": {
+      "delete": {
+        "operationId": "FilesController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders": {
+      "get": {
+        "operationId": "FoldersController_findAll",
+        "parameters": [
+          {
+            "name": "parentId",
+            "required": false,
+            "in": "query",
+            "description": "Carpeta madre. Omitirlo lista las carpetas raíz.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/FolderResponseDto"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "FoldersController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/folders/{id}": {
+      "get": {
+        "operationId": "FoldersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderDetailResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "patch": {
+        "operationId": "FoldersController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFolderDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "FoldersController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "folders"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/auth/register": {
+      "post": {
+        "operationId": "AuthController_register",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "AuthController_login",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "operationId": "AuthController_refresh",
+        "parameters": [
+          {
+            "name": "x-client-type",
+            "required": true,
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "AuthController_logout",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/admin/users/{id}/role": {
       "patch": {
         "operationId": "AdminController_updateRole",
@@ -1828,8 +1924,17 @@
             "type": "string",
             "nullable": true
           },
+          "bannerUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Portada de la cabecera de perfil (Fase 4.5). `null` si el usuario no subió ninguna: el cliente pinta su propia superficie, no una imagen de relleno."
+          },
           "isPublic": {
             "type": "boolean"
+          },
+          "postsCount": {
+            "type": "number",
+            "description": "Publicaciones del usuario. Visible también en la vista limitada de un perfil privado: dice cuánto hay, no qué hay."
           },
           "followersCount": {
             "type": "number"
@@ -1868,7 +1973,9 @@
           "username",
           "name",
           "avatarUrl",
+          "bannerUrl",
           "isPublic",
+          "postsCount",
           "followersCount",
           "followingCount",
           "viewerFollows",
@@ -1988,8 +2095,17 @@
             "type": "string",
             "nullable": true
           },
+          "bannerUrl": {
+            "type": "string",
+            "nullable": true,
+            "description": "Portada de la cabecera de perfil (Fase 4.5). `null` si el usuario no subió ninguna: el cliente pinta su propia superficie, no una imagen de relleno."
+          },
           "isPublic": {
             "type": "boolean"
+          },
+          "postsCount": {
+            "type": "number",
+            "description": "Publicaciones del usuario. Visible también en la vista limitada de un perfil privado: dice cuánto hay, no qué hay."
           },
           "followersCount": {
             "type": "number"
@@ -2016,7 +2132,9 @@
           "username",
           "name",
           "avatarUrl",
+          "bannerUrl",
           "isPublic",
+          "postsCount",
           "followersCount",
           "followingCount",
           "viewerFollows",
@@ -2084,383 +2202,6 @@
         "required": [
           "user",
           "since"
-        ]
-      },
-      "RegisterDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "example": "user@example.com"
-          },
-          "password": {
-            "type": "string",
-            "example": "S3cure-Password!"
-          },
-          "name": {
-            "type": "string",
-            "example": "Ada Lovelace"
-          },
-          "username": {
-            "type": "string",
-            "example": "ada.lovelace"
-          },
-          "cedula": {
-            "type": "string",
-            "example": "1020304050",
-            "description": "Cédula colombiana (solo dígitos)"
-          }
-        },
-        "required": [
-          "email",
-          "password",
-          "name",
-          "username",
-          "cedula"
-        ]
-      },
-      "UserResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string",
-            "nullable": true
-          }
-        },
-        "required": [
-          "id",
-          "email",
-          "name"
-        ]
-      },
-      "AuthResponseDto": {
-        "type": "object",
-        "properties": {
-          "accessToken": {
-            "type": "string"
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserResponseDto"
-          }
-        },
-        "required": [
-          "accessToken",
-          "user"
-        ]
-      },
-      "LoginDto": {
-        "type": "object",
-        "properties": {
-          "email": {
-            "type": "string",
-            "example": "user@example.com"
-          },
-          "password": {
-            "type": "string",
-            "example": "S3cure-Password!"
-          }
-        },
-        "required": [
-          "email",
-          "password"
-        ]
-      },
-      "LogoutResponseDto": {
-        "type": "object",
-        "properties": {
-          "loggedOut": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "loggedOut"
-        ]
-      },
-      "FolderCountDto": {
-        "type": "object",
-        "properties": {
-          "files": {
-            "type": "number"
-          },
-          "children": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "files",
-          "children"
-        ]
-      },
-      "FolderResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "userId": {
-            "type": "string"
-          },
-          "parentId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "_count": {
-            "$ref": "#/components/schemas/FolderCountDto"
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "userId",
-          "parentId",
-          "createdAt",
-          "updatedAt"
-        ]
-      },
-      "FolderPathItemDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "name"
-        ]
-      },
-      "FolderDetailResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "userId": {
-            "type": "string"
-          },
-          "parentId": {
-            "type": "string",
-            "nullable": true
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "updatedAt": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "_count": {
-            "$ref": "#/components/schemas/FolderCountDto"
-          },
-          "path": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/FolderPathItemDto"
-            }
-          }
-        },
-        "required": [
-          "id",
-          "name",
-          "userId",
-          "parentId",
-          "createdAt",
-          "updatedAt",
-          "_count",
-          "path"
-        ]
-      },
-      "CreateFolderDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Vacaciones 2026"
-          },
-          "parentId": {
-            "type": "object",
-            "description": "Carpeta madre. Ausente o null = carpeta raíz.",
-            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
-            "nullable": true
-          }
-        },
-        "required": [
-          "name"
-        ]
-      },
-      "UpdateFolderDto": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "Vacaciones 2026"
-          },
-          "parentId": {
-            "type": "object",
-            "description": "Nueva carpeta madre. `null` mueve la carpeta a la raíz; omitirlo no la mueve.",
-            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
-            "nullable": true
-          }
-        }
-      },
-      "FileResponseDto": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "folderId": {
-            "type": "string"
-          },
-          "originalName": {
-            "type": "string"
-          },
-          "mimeType": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "IMAGE",
-              "VIDEO",
-              "AUDIO",
-              "TEXT"
-            ]
-          },
-          "size": {
-            "type": "number"
-          },
-          "width": {
-            "type": "number",
-            "nullable": true
-          },
-          "height": {
-            "type": "number",
-            "nullable": true
-          },
-          "url": {
-            "type": "string"
-          },
-          "createdAt": {
-            "format": "date-time",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "folderId",
-          "originalName",
-          "mimeType",
-          "type",
-          "size",
-          "width",
-          "height",
-          "url",
-          "createdAt"
-        ]
-      },
-      "PresignFileDto": {
-        "type": "object",
-        "properties": {
-          "originalName": {
-            "type": "string",
-            "example": "boceto.png"
-          },
-          "mimeType": {
-            "type": "string",
-            "example": "image/png"
-          },
-          "size": {
-            "type": "number",
-            "example": 245678
-          }
-        },
-        "required": [
-          "originalName",
-          "mimeType",
-          "size"
-        ]
-      },
-      "PresignResponseDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "uploadUrl": {
-            "type": "string",
-            "description": "URL firmada para un PUT directo del binario a S3."
-          },
-          "expiresIn": {
-            "type": "number",
-            "description": "Segundos de validez de uploadUrl."
-          }
-        },
-        "required": [
-          "key",
-          "uploadUrl",
-          "expiresIn"
-        ]
-      },
-      "ConfirmFileDto": {
-        "type": "object",
-        "properties": {
-          "key": {
-            "type": "string",
-            "example": "users/uuid/folders/uuid/uuid.png"
-          },
-          "originalName": {
-            "type": "string",
-            "example": "boceto.png"
-          },
-          "mimeType": {
-            "type": "string",
-            "example": "image/png"
-          },
-          "size": {
-            "type": "number",
-            "example": 245678
-          },
-          "width": {
-            "type": "number",
-            "description": "Ancho en píxeles, medido por el cliente. El binario nunca pasa por el backend, así que nadie más puede conocerlo. Opcional: sin él, el medio se dibuja cuadrado en el masonry.",
-            "example": 1080
-          },
-          "height": {
-            "type": "number",
-            "description": "Alto en píxeles (ver `width`).",
-            "example": 1350
-          }
-        },
-        "required": [
-          "key",
-          "originalName",
-          "mimeType",
-          "size"
         ]
       },
       "PostMediaResponseDto": {
@@ -2804,6 +2545,383 @@
         },
         "required": [
           "body"
+        ]
+      },
+      "FileResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "folderId": {
+            "type": "string"
+          },
+          "originalName": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "IMAGE",
+              "VIDEO",
+              "AUDIO",
+              "TEXT"
+            ]
+          },
+          "size": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          },
+          "url": {
+            "type": "string"
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "folderId",
+          "originalName",
+          "mimeType",
+          "type",
+          "size",
+          "width",
+          "height",
+          "url",
+          "createdAt"
+        ]
+      },
+      "PresignFileDto": {
+        "type": "object",
+        "properties": {
+          "originalName": {
+            "type": "string",
+            "example": "boceto.png"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/png"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          }
+        },
+        "required": [
+          "originalName",
+          "mimeType",
+          "size"
+        ]
+      },
+      "PresignResponseDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "uploadUrl": {
+            "type": "string",
+            "description": "URL firmada para un PUT directo del binario a S3."
+          },
+          "expiresIn": {
+            "type": "number",
+            "description": "Segundos de validez de uploadUrl."
+          }
+        },
+        "required": [
+          "key",
+          "uploadUrl",
+          "expiresIn"
+        ]
+      },
+      "ConfirmFileDto": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string",
+            "example": "users/uuid/folders/uuid/uuid.png"
+          },
+          "originalName": {
+            "type": "string",
+            "example": "boceto.png"
+          },
+          "mimeType": {
+            "type": "string",
+            "example": "image/png"
+          },
+          "size": {
+            "type": "number",
+            "example": 245678
+          },
+          "width": {
+            "type": "number",
+            "description": "Ancho en píxeles, medido por el cliente. El binario nunca pasa por el backend, así que nadie más puede conocerlo. Opcional: sin él, el medio se dibuja cuadrado en el masonry.",
+            "example": 1080
+          },
+          "height": {
+            "type": "number",
+            "description": "Alto en píxeles (ver `width`).",
+            "example": 1350
+          }
+        },
+        "required": [
+          "key",
+          "originalName",
+          "mimeType",
+          "size"
+        ]
+      },
+      "FolderCountDto": {
+        "type": "object",
+        "properties": {
+          "files": {
+            "type": "number"
+          },
+          "children": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "files",
+          "children"
+        ]
+      },
+      "FolderResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "_count": {
+            "$ref": "#/components/schemas/FolderCountDto"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "userId",
+          "parentId",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "FolderPathItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "FolderDetailResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "parentId": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "_count": {
+            "$ref": "#/components/schemas/FolderCountDto"
+          },
+          "path": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FolderPathItemDto"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "userId",
+          "parentId",
+          "createdAt",
+          "updatedAt",
+          "_count",
+          "path"
+        ]
+      },
+      "CreateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Vacaciones 2026"
+          },
+          "parentId": {
+            "type": "object",
+            "description": "Carpeta madre. Ausente o null = carpeta raíz.",
+            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "nullable": true
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "UpdateFolderDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Vacaciones 2026"
+          },
+          "parentId": {
+            "type": "object",
+            "description": "Nueva carpeta madre. `null` mueve la carpeta a la raíz; omitirlo no la mueve.",
+            "example": "3f4d1e6a-0b2c-4d8e-9f10-1a2b3c4d5e6f",
+            "nullable": true
+          }
+        }
+      },
+      "RegisterDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure-Password!"
+          },
+          "name": {
+            "type": "string",
+            "example": "Ada Lovelace"
+          },
+          "username": {
+            "type": "string",
+            "example": "ada.lovelace"
+          },
+          "cedula": {
+            "type": "string",
+            "example": "1020304050",
+            "description": "Cédula colombiana (solo dígitos)"
+          }
+        },
+        "required": [
+          "email",
+          "password",
+          "name",
+          "username",
+          "cedula"
+        ]
+      },
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "name"
+        ]
+      },
+      "AuthResponseDto": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserResponseDto"
+          }
+        },
+        "required": [
+          "accessToken",
+          "user"
+        ]
+      },
+      "LoginDto": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "example": "user@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "S3cure-Password!"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "LogoutResponseDto": {
+        "type": "object",
+        "properties": {
+          "loggedOut": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "loggedOut"
         ]
       },
       "UpdateUserRoleDto": {

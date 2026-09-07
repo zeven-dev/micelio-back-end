@@ -86,6 +86,48 @@ la misma tarea.
   **Anidados desde el inicio** (decisión #12 de `PRODUCT.md`): `parentId` en `Comment`, un solo
   nivel de profundidad; formas exactas en `API-CONTRACTS.md`.
 
+## Fase 4.5 — Banner de perfil y contadores — **cerrada 2026-09-07**
+Fase pequeña de back-end que habilita el rediseño de perfil pedido por el dueño el 2026-09-07
+(decisión #14 de `PRODUCT.md`). El grueso de la fase es visual y vive en los clientes; aquí solo
+están los dos datos que hoy no existen y que la cabecera nueva necesita.
+- [x] **Banner de perfil**: `bannerKey` en `User` + `POST /api/users/me/banner/presign`,
+  `PATCH /api/users/me/banner` (`{ key }`) y `DELETE /api/users/me/banner`. *Dónde:*
+  `prisma/schema.prisma`, `src/users`, `src/storage`. Reutiliza tal cual el patrón presign +
+  confirm del avatar (`UPLOAD_MAX_BANNER_MB`, 10 MB por defecto, JPEG/PNG/WEBP) — contrato exacto
+  en `API-CONTRACTS.md` ("Subida directa a S3"). *Por qué una columna y no un `FileAsset`:* la
+  portada no es obra del usuario ni vive en su biblioteca, mismo razonamiento que el avatar.
+- [x] **`postsCount` en `UserPublic`**: contar las publicaciones del usuario, visible también en
+  la vista limitada de un perfil privado. Implementado con `PostsService.countByAuthorIds` (el
+  conteo es un dato de `posts`, se pide por servicio — regla 7); cuando llegue `kind` en la 4.6,
+  ese mismo método filtra por `MEDIA` y suma `notesCount`. *Por qué:*
+  el dueño pidió el conteo de publicaciones en la cabecera; hasta hoy el `DESIGN-SYSTEM.md` de
+  los clientes prohibía mostrarlo porque el contrato no lo traía (habría sido un dato inventado).
+  `notesCount` llega en la 4.6 con las notas.
+- [x] **Contrato exportado**: `npm run api:export` con `bannerUrl`/`postsCount` en el schema de
+  `UserPublic`, para que los clientes corran `sync:api` antes de empezar su parte.
+
+## Fase 4.6 — Notas (columnas de opinión)
+Decisión #13 de `PRODUCT.md`. Una nota es un `Post` con `kind: NOTE` — **no** un módulo nuevo:
+el porqué y las dos alternativas descartadas están en `ARCHITECTURE.md` (desviación 4) y en
+`DATA-MODEL.md`. Todo lo que ya existe para publicaciones (likes, guardados, comentarios, home
+feed, visibilidad) debe funcionar sobre notas **sin código nuevo**; si algo lo necesita, es señal
+de que se está construyendo una entidad paralela por accidente.
+- [ ] **Esquema**: enum `PostKind (MEDIA|NOTE)` + `title`, `coverFileAssetId` en `Post`; tabla
+  `PostBlock` (`position`, `type PARAGRAPH|HEADING|QUOTE|IMAGE`, `text`, `fileAssetId`,
+  `caption`). La migración rellena `kind: MEDIA` en las filas existentes. *Dónde:*
+  `prisma/schema.prisma`, `src/posts`. Campos exactos en `DATA-MODEL.md`.
+- [ ] **Endpoints**: `POST /api/posts/notes`, `PATCH /api/posts/notes/:id`,
+  `GET /api/users/:username/notes`. `GET /api/posts/:id` y `DELETE /api/posts/:id` sirven ambos
+  `kind` sin cambios. Validaciones por tipo de bloque, `excerpt` derivado en el servidor y
+  `reorder` rechazando notas: contrato exacto en `API-CONTRACTS.md` ("Notas — Fase 4.6").
+- [ ] **Home feed**: `GET /api/feed` incluye notas con el mismo algoritmo y el mismo cursor (una
+  nota es un post más para el ranking). Verificar que la consulta de candidatos no filtre por
+  `kind` y que la forma de respuesta no cambie.
+- [ ] **`notesCount` en `UserPublic`** y `GET /api/users/:username/posts` filtrando
+  `kind: MEDIA`, para que el tab Publicaciones no muestre notas.
+- [ ] **Specs**: creación/edición de notas (validación por tipo de bloque, límite de 100 bloques,
+  derivación del `excerpt`, rechazo en `reorder`) en `src/posts/*.spec.ts`.
+
 ## Fase 5 — Afinidad y ranking personalizado
 - [ ] **Módulo `ranking`**: tablas `UserAffinity` y `UserTagAffinity` (ver `DATA-MODEL.md`),
   listeners de `post.liked/unliked`, `comment.created`, `post.saved/unsaved`, `post.shared`
@@ -117,9 +159,9 @@ la misma tarea.
   aquí (Fase 12).
 
 ## Fase 9 — Búsqueda y explore
-- [ ] **Módulo `search`**: `GET /api/search?q=&type=users|posts|market&category=` — usuarios
-  por username/nombre, palabras clave en descripciones **y etiquetas** de posts, ítems de
-  market con filtro por categoría. Aplica la regla de visibilidad de la Fase 3 y el **orden
+- [ ] **Módulo `search`**: `GET /api/search?q=&type=users|posts|notes|market&category=` — usuarios
+  por username/nombre, palabras clave en descripciones **y etiquetas** de posts, **título y texto
+  de las notas** (`type=notes`, Fase 4.6), ítems de market con filtro por categoría. Aplica la regla de visibilidad de la Fase 3 y el **orden
   por afinidad** de `API-CONTRACTS.md` ("Orden de resultados de búsqueda"). Postgres
   `ILIKE`/pg_trgm + índice GIN de tags.
 - [ ] **Explore**: `GET /api/explore` con el contrato y orden exactos de `API-CONTRACTS.md`

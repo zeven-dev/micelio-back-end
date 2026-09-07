@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { FilesModule } from '../files/files.module';
 import { SocialModule } from '../social/social.module';
 import { StorageModule } from '../storage/storage.module';
@@ -14,11 +14,15 @@ import { PostsService } from './posts.service';
 // `folders` ni `file_assets` con Prisma.
 // Likes, guardados y comentarios (Fase 4) volvieron a vivir aquí (antes en `social`) al
 // deshacer el ciclo de tres módulos que generaban: `social` ya no depende de `posts`, así que
-// este módulo importa `SocialModule` y `UsersModule` en una sola dirección, sin `forwardRef`
-// (confirmado arrancando el `AppModule` real con `npm run api:export`). El ciclo real que queda
-// en el proyecto es `users` ↔ `social`, independiente de este módulo — ver `docs/ARCHITECTURE.md`.
+// este módulo importa `SocialModule` en una sola dirección, sin `forwardRef`.
+// `UsersModule` **sí** vuelve a ser un ciclo desde la Fase 4.5: el perfil muestra `postsCount`,
+// que es un dato de este dominio, mientras que los posts embeben el `UserPublic` de su autor.
+// Es la misma forma de ciclo real que ya tenía `users` ↔ `social`, y se resuelve igual: el cruce
+// sigue siendo por **servicio público** (`PostsService.countByAuthorIds`), nunca por las tablas
+// del otro módulo; `forwardRef` es solo cómo NestJS resuelve el orden de carga.
+// Ver la desviación 5 de `docs/ARCHITECTURE.md`.
 @Module({
-  imports: [UsersModule, SocialModule, FilesModule, StorageModule],
+  imports: [forwardRef(() => UsersModule), SocialModule, FilesModule, StorageModule],
   controllers: [PostsController, PostInteractionsController],
   providers: [PostsService, PostInteractionsService],
   exports: [PostsService, PostInteractionsService],

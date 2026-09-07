@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { AuthenticatedUser } from '../auth/interfaces/authenticated-user.interface';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -39,6 +39,26 @@ export class UsersController {
   @ApiOkResponse({ type: MeView })
   updateAvatar(@CurrentUser() user: AuthenticatedUser, @Body() dto: ConfirmAvatarDto) {
     return this.usersService.updateAvatar(user.id, dto);
+  }
+
+  // Portada de la cabecera de perfil (Fase 4.5): mismo camino que el avatar — presign, PUT
+  // directo a S3, confirm — más el borrado, porque un perfil sin portada es un estado válido.
+  @Post('me/banner/presign')
+  @ApiCreatedResponse({ type: PresignAvatarResponseDto })
+  presignBanner(@CurrentUser() user: AuthenticatedUser, @Body() dto: PresignAvatarDto) {
+    return this.usersService.presignBanner(user.id, dto);
+  }
+
+  @Patch('me/banner')
+  @ApiOkResponse({ type: MeView })
+  updateBanner(@CurrentUser() user: AuthenticatedUser, @Body() dto: ConfirmAvatarDto) {
+    return this.usersService.updateBanner(user.id, dto);
+  }
+
+  @Delete('me/banner')
+  @ApiOkResponse({ type: MeView })
+  removeBanner(@CurrentUser() user: AuthenticatedUser) {
+    return this.usersService.removeBanner(user.id);
   }
 
   // Decisión del dueño del producto: los perfiles se comparten por link, así que esta ruta

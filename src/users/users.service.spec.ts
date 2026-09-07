@@ -5,6 +5,7 @@ import {
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PostsService } from '../posts/posts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialService } from '../social/social.service';
 import { StorageService } from '../storage/storage.service';
@@ -27,6 +28,7 @@ describe('UsersService', () => {
     canViewWithGraph: jest.Mock;
     canView: jest.Mock;
   };
+  let posts: { countByAuthorIds: jest.Mock };
 
   /** Grafo vacío: nadie sigue a nadie, que es el estado por defecto de estas pruebas. */
   const emptyGraph = {
@@ -46,6 +48,7 @@ describe('UsersService', () => {
     role: 'USER',
     bio: null,
     avatarKey: null,
+    bannerKey: null,
     isPublic: false,
     feedLayout: 'GRID',
     feedColumns: 3,
@@ -68,11 +71,13 @@ describe('UsersService', () => {
       delete: jest.fn().mockResolvedValue(undefined),
       deleteByPrefix: jest.fn().mockResolvedValue(0),
     };
-    // Mock por clave, no un valor único: el avatar tiene su propio tope
-    // (`uploads.maxAvatarMb`) y confundirlo con otro valor es justo el error que estas
-    // pruebas vigilan.
+    // Mock por clave, no un valor único: avatar y portada tienen topes distintos
+    // (`uploads.maxAvatarMb` vs. `uploads.maxBannerMb`) y confundirlos es justo el error que
+    // estas pruebas vigilan.
     configService = {
-      get: jest.fn((key: string) => (key === 'uploads.maxAvatarMb' ? 5 : 300)),
+      get: jest.fn((key: string) =>
+        key === 'uploads.maxAvatarMb' ? 5 : key === 'uploads.maxBannerMb' ? 10 : 300,
+      ),
     } as unknown as ConfigService;
     social = {
       getGraphInfoFor: jest.fn(async (ids: string[]) => new Map(ids.map((id) => [id, emptyGraph]))),
@@ -94,11 +99,13 @@ describe('UsersService', () => {
         viewerId !== undefined && viewerId === owner.id ? true : owner.isPublic,
       ),
     };
+    posts = { countByAuthorIds: jest.fn(async () => new Map<string, number>()) };
     usersService = new UsersService(
       prisma as unknown as PrismaService,
       configService,
       storage,
       social as unknown as SocialService,
+      posts as unknown as PostsService,
     );
   });
 
@@ -361,6 +368,119 @@ describe('UsersService', () => {
 
       expect(storage.delete).toHaveBeenCalledWith('avatars/user-1/big.png');
       expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // Fase 4.5. La portada comparte camino con el avatar (presign → PUT → confirm) pero tiene su
+  // propio prefijo, su propia columna y su propio tope: estas pruebas vigilan justamente que el
+  // camino compartido no confunda los tres.
+  describe('portada de perfil', () => {
+    it('firma la subida bajo el prefijo del banner, no el del avatar', async () => {
+      const result = await usersService.presignBanner('user-1', {
+        mimeType: 'image/jpeg',
+        size: 1024,
+      });
+
+      expect(result.key).toMatch(/^banners\/user-1\//);
+    });
+
+    it('acepta un tamaño que el avatar rechazaría, porque su tope es propio', async () => {
+      const sevenMb = 7 * 1024 * 1024;
+
+      await expect(
+        usersService.presignAvatar('user-1', { mimeType: 'image/jpeg', size: sevenMb }),
+      ).rejects.toBeInstanceOf(PayloadTooLargeException);
+      await expect(
+        usersService.presignBanner('user-1', { mimeType: 'image/jpeg', size: sevenMb }),
+      ).resolves.toBeDefined();
+    });
+
+    it('rechaza un mimeType que no sea JPEG, PNG o WEBP', async () => {
+      await expect(
+        usersService.presignBanner('user-1', { mimeType: 'image/gif', size: 1024 }),
+      ).rejects.toBeInstanceOf(UnsupportedMediaTypeException);
+    });
+
+    it('rechaza una key de otro usuario', async () => {
+      await expect(
+        usersService.updateBanner('user-1', { key: 'banners/other-user/x.png' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('confirma la portada en su propia columna y borra la anterior', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        bannerKey: 'banners/user-1/old.png',
+      });
+      prisma.user.update.mockResolvedValue({ ...baseUser, bannerKey: 'banners/user-1/new.png' });
+
+      await usersService.updateBanner('user-1', { key: 'banners/user-1/new.png' });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { bannerKey: 'banners/user-1/new.png' },
+      });
+      expect(storage.delete).toHaveBeenCalledWith('banners/user-1/old.png');
+    });
+
+    it('quitar la portada la borra de S3 y deja la columna en null', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        ...baseUser,
+        bannerKey: 'banners/user-1/old.png',
+      });
+      prisma.user.update.mockResolvedValue({ ...baseUser, bannerKey: null });
+
+      const result = await usersService.removeBanner('user-1');
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { bannerKey: null },
+      });
+      expect(storage.delete).toHaveBeenCalledWith('banners/user-1/old.png');
+      expect(result.bannerUrl).toBeNull();
+    });
+
+    it('quitar una portada que no existe no escribe ni borra nada', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, bannerKey: null });
+
+      await usersService.removeBanner('user-1');
+
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(storage.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // Fase 4.5. El conteo es un dato de `posts`: `users` lo pide por servicio y nunca cuenta la
+  // tabla por su cuenta (regla 7). Un autor sin publicaciones no sale del `groupBy`, así que la
+  // ausencia tiene que resolverse como 0 y no como `undefined`.
+  describe('postsCount', () => {
+    it('toma el conteo de PostsService', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: true });
+      posts.countByAuthorIds.mockResolvedValue(new Map([['user-1', 7]]));
+
+      const result = await usersService.getPublicProfile('ada', 'viewer-1');
+
+      expect(posts.countByAuthorIds).toHaveBeenCalledWith(['user-1']);
+      expect(result.postsCount).toBe(7);
+    });
+
+    it('es 0 cuando el autor no tiene publicaciones', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: true });
+      posts.countByAuthorIds.mockResolvedValue(new Map());
+
+      const result = await usersService.getPublicProfile('ada', 'viewer-1');
+
+      expect(result.postsCount).toBe(0);
+    });
+
+    it('se devuelve también en la vista limitada de un perfil privado', async () => {
+      prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: false });
+      posts.countByAuthorIds.mockResolvedValue(new Map([['user-1', 3]]));
+
+      const result = await usersService.getPublicProfile('ada', 'stranger');
+
+      expect(result.bio).toBeUndefined();
+      expect(result.postsCount).toBe(3);
     });
   });
 });

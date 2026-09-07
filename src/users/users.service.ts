@@ -13,6 +13,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { FeedLayout, Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { BYTES_PER_MB } from '../files/utils/file-type.util';
+import { PostsService } from '../posts/posts.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialGraphInfo, SocialService } from '../social/social.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
@@ -21,7 +22,33 @@ import { PresignAvatarDto } from './dto/presign-avatar.dto';
 import { PresignAvatarResponseDto } from './dto/presign-avatar-response.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 
-const AVATAR_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const PROFILE_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+/**
+ * Las dos imágenes de perfil (avatar y portada) comparten camino de subida y solo se diferencian
+ * en estos cuatro datos. El mensaje de error usa `label` como sujeto de la frase, así que
+ * incluye el artículo ("El avatar", "La portada") — así los textos existentes no cambian.
+ */
+interface ProfileImageSpec {
+  readonly prefix: string;
+  readonly column: 'avatarKey' | 'bannerKey';
+  readonly maxMbConfigKey: string;
+  readonly label: string;
+}
+
+const AVATAR_IMAGE: ProfileImageSpec = {
+  prefix: 'avatars',
+  column: 'avatarKey',
+  maxMbConfigKey: 'uploads.maxAvatarMb',
+  label: 'El avatar',
+};
+
+const BANNER_IMAGE: ProfileImageSpec = {
+  prefix: 'banners',
+  column: 'bannerKey',
+  maxMbConfigKey: 'uploads.maxBannerMb',
+  label: 'La portada',
+};
 
 export interface CreateUserData {
   email: string;
@@ -55,8 +82,24 @@ export class UserPublicView {
   @ApiProperty({ nullable: true, type: String })
   avatarUrl: string | null;
 
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'Portada de la cabecera de perfil (Fase 4.5). `null` si el usuario no subió ninguna: ' +
+      'el cliente pinta su propia superficie, no una imagen de relleno.',
+  })
+  bannerUrl: string | null;
+
   @ApiProperty()
   isPublic: boolean;
+
+  @ApiProperty({
+    description:
+      'Publicaciones del usuario. Visible también en la vista limitada de un perfil privado: ' +
+      'dice cuánto hay, no qué hay.',
+  })
+  postsCount: number;
 
   @ApiProperty()
   followersCount: number;
@@ -96,6 +139,10 @@ export class UsersService {
     // El grafo social (conteos, follows, regla de visibilidad) vive en `social`; `users` solo
     // lo consume. Ver la nota de `forwardRef` en `SocialService`.
     @Inject(forwardRef(() => SocialService)) private readonly socialService: SocialService,
+    // El conteo de publicaciones del perfil (Fase 4.5) es un dato de `posts`: se pide por
+    // servicio público, nunca contando su tabla desde aquí (regla 7). El ciclo que esto crea es
+    // el mismo caso que `social` y está documentado en `ARCHITECTURE.md` (desviación 5).
+    @Inject(forwardRef(() => PostsService)) private readonly postsService: PostsService,
   ) {}
 
   findByEmail(email: string) {
@@ -147,30 +194,81 @@ export class UsersService {
     return { ...publicView, email: updated.email, role: updated.role };
   }
 
-  async presignAvatar(userId: string, dto: PresignAvatarDto): Promise<PresignAvatarResponseDto> {
-    if (!AVATAR_MIME_TYPES.includes(dto.mimeType)) {
-      throw new UnsupportedMediaTypeException('El avatar debe ser una imagen JPEG, PNG o WEBP');
+  presignAvatar(userId: string, dto: PresignAvatarDto): Promise<PresignAvatarResponseDto> {
+    return this.presignProfileImage(AVATAR_IMAGE, userId, dto);
+  }
+
+  updateAvatar(userId: string, dto: ConfirmAvatarDto): Promise<MeView> {
+    return this.confirmProfileImage(AVATAR_IMAGE, userId, dto);
+  }
+
+  presignBanner(userId: string, dto: PresignAvatarDto): Promise<PresignAvatarResponseDto> {
+    return this.presignProfileImage(BANNER_IMAGE, userId, dto);
+  }
+
+  updateBanner(userId: string, dto: ConfirmAvatarDto): Promise<MeView> {
+    return this.confirmProfileImage(BANNER_IMAGE, userId, dto);
+  }
+
+  /**
+   * Quitar la portada es un estado válido y querido (el avatar no tiene equivalente porque
+   * siempre hay uno por defecto en la UI). Idempotente: sin portada, no hace nada y responde el
+   * mismo `Me`.
+   */
+  async removeBanner(userId: string): Promise<MeView> {
+    const user = await this.requireById(userId);
+    if (!user.bannerKey) {
+      return this.getMe(userId);
     }
-    // El avatar tiene su propio tope (`UPLOAD_MAX_AVATAR_MB`), más chico que el de una imagen
-    // de biblioteca: se muestra siempre y en miniatura, no tiene sentido guardarlo pesado.
-    const maxAvatarBytes = this.configService.get<number>('uploads.maxAvatarMb')! * BYTES_PER_MB;
-    if (dto.size > maxAvatarBytes) {
+    const updated = await this.prisma.user.update({
+      where: { id: userId },
+      data: { bannerKey: null },
+    });
+    await this.deletePreviousImage(user.bannerKey, BANNER_IMAGE);
+    const publicView = await this.buildView(updated, userId);
+    return { ...publicView, email: updated.email, role: updated.role };
+  }
+
+  /**
+   * Presign de una imagen de perfil (avatar o portada). Ambas siguen el mismo camino de la Fase
+   * 0.5 —presign, PUT directo a S3, confirm— y se diferencian solo en prefijo, tope de peso y
+   * columna; tenerlo escrito dos veces era la forma segura de que se desviaran con el tiempo.
+   */
+  private async presignProfileImage(
+    image: ProfileImageSpec,
+    userId: string,
+    dto: PresignAvatarDto,
+  ): Promise<PresignAvatarResponseDto> {
+    if (!PROFILE_IMAGE_MIME_TYPES.includes(dto.mimeType)) {
+      throw new UnsupportedMediaTypeException(
+        `${image.label} debe ser una imagen JPEG, PNG o WEBP`,
+      );
+    }
+    // Cada imagen de perfil tiene su propio tope (`UPLOAD_MAX_AVATAR_MB` /
+    // `UPLOAD_MAX_BANNER_MB`), distinto del de una imagen de biblioteca: el avatar se muestra en
+    // miniatura y la portada es ancha, ninguna necesita el peso de una obra publicada.
+    const maxBytes = this.maxBytesFor(image);
+    if (dto.size > maxBytes) {
       throw new PayloadTooLargeException(
-        `El avatar supera el tamaño máximo de ${Math.floor(maxAvatarBytes / BYTES_PER_MB)} MB`,
+        `${image.label} supera el tamaño máximo de ${Math.floor(maxBytes / BYTES_PER_MB)} MB`,
       );
     }
 
     const extension =
       dto.mimeType === 'image/png' ? '.png' : dto.mimeType === 'image/webp' ? '.webp' : '.jpg';
-    const key = `avatars/${userId}/${randomUUID()}${extension}`;
+    const key = `${image.prefix}/${userId}/${randomUUID()}${extension}`;
     const expiresIn = this.configService.get<number>('s3.signedUrlExpiresIn') ?? 300;
     const uploadUrl = await this.storageService.getSignedUploadUrl(key, dto.mimeType, expiresIn);
 
     return { key, uploadUrl, expiresIn };
   }
 
-  async updateAvatar(userId: string, dto: ConfirmAvatarDto): Promise<MeView> {
-    const expectedPrefix = `avatars/${userId}/`;
+  private async confirmProfileImage(
+    image: ProfileImageSpec,
+    userId: string,
+    dto: ConfirmAvatarDto,
+  ): Promise<MeView> {
+    const expectedPrefix = `${image.prefix}/${userId}/`;
     if (!dto.key.startsWith(expectedPrefix)) {
       throw new ForbiddenException('La key subida no corresponde a este usuario');
     }
@@ -178,41 +276,50 @@ export class UsersService {
     const uploaded = await this.storageService.headObject(dto.key);
     if (!uploaded) {
       throw new NotFoundException(
-        'El avatar todavía no llegó a S3; sube el binario antes de confirmar',
+        `${image.label} todavía no llegó a S3; sube el binario antes de confirmar`,
       );
     }
 
     // La URL prefirmada no impone tamaño: el `size` del presign era una promesa del cliente.
-    // El tamaño real solo lo sabe S3, y un avatar pasado de peso se borra en vez de quedar
-    // huérfano en el bucket.
-    const maxAvatarBytes = this.configService.get<number>('uploads.maxAvatarMb')! * BYTES_PER_MB;
-    if (uploaded.size > maxAvatarBytes) {
+    // El tamaño real solo lo sabe S3, y una imagen pasada de peso se borra en vez de quedar
+    // huérfana en el bucket.
+    const maxBytes = this.maxBytesFor(image);
+    if (uploaded.size > maxBytes) {
       await this.storageService.delete(dto.key);
       throw new PayloadTooLargeException(
-        `El avatar supera el tamaño máximo de ${Math.floor(maxAvatarBytes / BYTES_PER_MB)} MB`,
+        `${image.label} supera el tamaño máximo de ${Math.floor(maxBytes / BYTES_PER_MB)} MB`,
       );
     }
 
     const user = await this.requireById(userId);
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { avatarKey: dto.key },
+      data: { [image.column]: dto.key },
     });
-    // El avatar nuevo ya está guardado y referenciado: borrar el anterior es limpieza,
-    // no parte del cambio. Si S3 falla aquí, se registra y se deja la key huérfana en
-    // vez de responder 500 sobre una actualización que sí se aplicó.
-    if (user.avatarKey) {
-      try {
-        await this.storageService.delete(user.avatarKey);
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo borrar el avatar anterior (${user.avatarKey}): ${String(error)}`,
-        );
-      }
-    }
+    await this.deletePreviousImage(user[image.column], image);
 
     const publicView = await this.buildView(updated, userId);
     return { ...publicView, email: updated.email, role: updated.role };
+  }
+
+  /**
+   * La imagen nueva ya está guardada y referenciada: borrar la anterior es limpieza, no parte
+   * del cambio. Si S3 falla aquí, se registra y se deja la key huérfana en vez de responder 500
+   * sobre una actualización que sí se aplicó.
+   */
+  private async deletePreviousImage(key: string | null, image: ProfileImageSpec): Promise<void> {
+    if (!key) return;
+    try {
+      await this.storageService.delete(key);
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo borrar ${image.label.toLowerCase()} anterior (${key}): ${String(error)}`,
+      );
+    }
+  }
+
+  private maxBytesFor(image: ProfileImageSpec): number {
+    return this.configService.get<number>(image.maxMbConfigKey)! * BYTES_PER_MB;
   }
 
   /**
@@ -280,15 +387,20 @@ export class UsersService {
     if (unique.length === 0) return new Map();
 
     const users = await this.prisma.user.findMany({ where: { id: { in: unique } } });
-    // Un solo viaje al grafo para todos los usuarios de la página, no cuatro consultas por cada.
-    const graph = await this.socialService.getGraphInfoFor(
-      users.map((user) => user.id),
-      viewerId,
-    );
+    const userIds = users.map((user) => user.id);
+    // Un solo viaje al grafo y uno solo al conteo de publicaciones para todos los usuarios de la
+    // página, no dos consultas por cada uno.
+    const [graph, postCounts] = await Promise.all([
+      this.socialService.getGraphInfoFor(userIds, viewerId),
+      this.postsService.countByAuthorIds(userIds),
+    ]);
     const views = await Promise.all(
       users.map(
         async (user) =>
-          [user.id, await this.buildView(user, viewerId, graph.get(user.id))] as const,
+          [
+            user.id,
+            await this.buildView(user, viewerId, graph.get(user.id), postCounts.get(user.id) ?? 0),
+          ] as const,
       ),
     );
     return new Map(views);
@@ -303,11 +415,14 @@ export class UsersService {
     user: User,
     viewerId?: string,
     graph?: SocialGraphInfo,
+    postsCount?: number,
   ): Promise<UserPublicView> {
-    const info =
-      graph ?? (await this.socialService.getGraphInfoFor([user.id], viewerId)).get(user.id)!;
+    const [info, counted] = await Promise.all([
+      graph ?? this.socialService.getGraphInfoFor([user.id], viewerId).then((m) => m.get(user.id)!),
+      postsCount ?? this.postsService.countByAuthorIds([user.id]).then((m) => m.get(user.id) ?? 0),
+    ]);
     const includeExtended = this.socialService.canViewWithGraph(user, viewerId, info);
-    return this.toUserPublic(user, { includeExtended, graph: info });
+    return this.toUserPublic(user, { includeExtended, graph: info, postsCount: counted });
   }
 
   private async requireById(id: string): Promise<User> {
@@ -320,18 +435,21 @@ export class UsersService {
 
   private async toUserPublic(
     user: User,
-    opts: { includeExtended: boolean; graph: SocialGraphInfo },
+    opts: { includeExtended: boolean; graph: SocialGraphInfo; postsCount: number },
   ): Promise<UserPublicView> {
-    const avatarUrl = user.avatarKey
-      ? await this.storageService.getSignedDownloadUrl(user.avatarKey)
-      : null;
+    const [avatarUrl, bannerUrl] = await Promise.all([
+      user.avatarKey ? this.storageService.getSignedDownloadUrl(user.avatarKey) : null,
+      user.bannerKey ? this.storageService.getSignedDownloadUrl(user.bannerKey) : null,
+    ]);
 
     const base: UserPublicView = {
       id: user.id,
       username: user.username,
       name: user.name ?? '',
       avatarUrl,
+      bannerUrl,
       isPublic: user.isPublic,
+      postsCount: opts.postsCount,
       followersCount: opts.graph.followersCount,
       followingCount: opts.graph.followingCount,
       viewerFollows: opts.graph.viewerFollows,

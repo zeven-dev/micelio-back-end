@@ -1,4 +1,10 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Comment } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
@@ -71,7 +77,9 @@ function isItemCursor(value: unknown): value is ItemCursor {
 export class PostInteractionsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly usersService: UsersService,
+    // `forwardRef` por el ciclo `users` ↔ `posts` de la Fase 4.5 (el perfil cuenta
+    // publicaciones): ver la nota de `PostsModule` y la desviación 5 de `ARCHITECTURE.md`.
+    @Inject(forwardRef(() => UsersService)) private readonly usersService: UsersService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
