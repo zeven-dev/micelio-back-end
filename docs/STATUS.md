@@ -105,6 +105,25 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-07 — Hueco de contrato encontrado por front-end: `fileAssetId` de bloques IMAGE (tarea, anotación entre repos)
+- **Listo:** nada de código; es la traslación de un hallazgo real de `micelio-front-end` al
+  cerrar su parte de la Fase 4.6 (ver su `docs/STATUS.md`), como pide `ORCHESTRATION.md` cuando
+  un cliente encuentra un hueco de contrato en vez de improvisar una forma ad-hoc.
+- **Necesito — decisión del dueño del producto:** `PostBlockResponseDto` (un bloque `IMAGE` de
+  una nota ya guardada) solo devuelve `image: { url, expiresAt, width, height }` — nunca el
+  `fileAssetId` de origen. Como `PATCH /api/posts/notes/:id` reemplaza `blocks` completo (sin
+  deltas, por diseño), un cliente que edite una nota existente **no puede** reenviar un bloque
+  `IMAGE` preexistente tal cual: no tiene el id para reconstruir el body. Los dos clientes lo
+  resolvieron obligando a re-elegir la imagen de cada bloque `IMAGE` preexistente antes de
+  guardar una edición (fricción de UX real, no un bug). La corrección de fondo —agregar
+  `fileAssetId` a `PostBlockResponseDto.image` (y a `cover`)— es un cambio de contrato: toca
+  `src/posts/dto/post-response.dto.ts` y `PostsService.buildAssetView`/`buildBlockView`, y
+  requiere `sync:api` en los dos clientes después.
+- **Falta:** decidir si se justifica (dispara el disparador 1 de `ORCHESTRATION.md`: cambia una
+  forma que consumen los tres repos) antes de tocar código.
+- **Sigue:** si el dueño confirma, es una tarea corta de back-end (bloque D breve porque es
+  agregar un campo a una forma ya decidida, no diseñarla desde cero) antes de la Fase 6.
+
 ### 2026-09-07 — Fase 4.6: notas (cierre de fase, back-end)
 - **Listo:**
   - **Esquema**: `PostKind (MEDIA|NOTE)`, `PostBlockType (PARAGRAPH|HEADING|QUOTE|IMAGE)`,
