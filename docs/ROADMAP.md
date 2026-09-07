@@ -10,6 +10,11 @@ en `PRODUCT.md`) — construir **al pie de la letra**; ante ambigüedad real, an
 **descarga de conocimiento** en `STATUS.md` (qué quedó listo, qué falta, qué se necesita, qué
 sigue). Commits cortos de una línea. Respetar `ARCHITECTURE.md` siempre.
 
+**Modelos:** cada fase pendiente dice con qué modelo se trabaja en su línea "**Modelo**", y por
+qué. La política completa —cuándo Opus 5, cuándo Sonnet 5 y cómo se agrupa el trabajo en dos
+bloques con un solo handoff— está en `ORCHESTRATION.md` ("Qué modelo usa cada cosa"). Regla base:
+**Sonnet 5**; una fase sin línea de modelo es Sonnet 5.
+
 **Contratos:** la forma exacta de toda petición/respuesta nueva está en `API-CONTRACTS.md` —
 implementar exactamente eso, sin inventar formas; si un contrato cambia, se actualiza allí en
 la misma tarea.
@@ -107,6 +112,13 @@ están los dos datos que hoy no existen y que la cabecera nueva necesita.
   `UserPublic`, para que los clientes corran `sync:api` antes de empezar su parte.
 
 ## Fase 4.6 — Notas (columnas de opinión)
+**Modelo: Sonnet 5 toda la fase.** No lleva bloque D: el diseño (una nota es un `Post` con
+`kind: NOTE`, la forma completa, los tres endpoints, las reglas por tipo de bloque) **ya se
+decidió y quedó escrito** el 2026-09-07 en `API-CONTRACTS.md`, `DATA-MODEL.md` y
+`ARCHITECTURE.md`. Lo que queda es transcribirlo, y transcribir bien no necesita Opus 5. Única
+excepción: la **revisión final** antes de cerrar, en Opus 5, porque la fase cambia el contrato que
+consumen los dos clientes (disparador 6).
+
 Decisión #13 de `PRODUCT.md`. Una nota es un `Post` con `kind: NOTE` — **no** un módulo nuevo:
 el porqué y las dos alternativas descartadas están en `ARCHITECTURE.md` (desviación 4) y en
 `DATA-MODEL.md`. Todo lo que ya existe para publicaciones (likes, guardados, comentarios, home
@@ -129,6 +141,12 @@ de que se está construyendo una entidad paralela por accidente.
   derivación del `excerpt`, rechazo en `reorder`) en `src/posts/*.spec.ts`.
 
 ## Fase 5 — Afinidad y ranking personalizado
+**Modelo: bloque D (Opus 5, corto) → bloque I (Sonnet 5).** Disparador 2: es matemática exacta
+—pesos, vida media de 90 días, decay-then-add, topes de boost— y un error de fórmula no lo atrapa
+ningún `type-check`, se ve meses después como "el feed se siente raro". El bloque D **no escribe
+código**: repasa que la fórmula de `API-CONTRACTS.md` no tenga huecos (qué pasa con `updatedAt`
+en el futuro, redondeo, empates) y deja fijados los **casos de prueba con fechas fijas**. Con eso
+escrito, las tablas, los listeners, el feed v2 y las specs son Sonnet 5.
 - [ ] **Módulo `ranking`**: tablas `UserAffinity` y `UserTagAffinity` (ver `DATA-MODEL.md`),
   listeners de `post.liked/unliked`, `comment.created`, `post.saved/unsaved`, `post.shared`
   con los **pesos y decaimiento exactos** de `API-CONTRACTS.md` ("Afinidad y ranking": vida
@@ -141,6 +159,12 @@ de que se está construyendo una entidad paralela por accidente.
   (probar la fórmula con fechas fijas).
 
 ## Fase 6 — Chat (sockets)
+**Modelo: bloque D (Opus 5) → bloque I (Sonnet 5).** Disparadores 1 y 4: entidades nuevas que los
+dos clientes van a consumir, un canal de tiempo real que no existe en el proyecto, y
+`ChatAttachment` deliberadamente **separado** de `FileAsset` (los adjuntos de chat no van a la
+biblioteca) — una decisión de arquitectura fácil de romper por accidente al implementar. El
+bloque D cierra además la **pregunta abierta #1** de `PRODUCT.md` (grupales o solo 1 a 1) con el
+dueño. Gateway, REST del historial y toda la UI de los clientes: Sonnet 5.
 - [ ] **Módulo `chat`**: gateway WebSocket (socket.io) autenticado con access token;
   `Conversation`, `ConversationParticipant`, `Message`, `ChatAttachment` (**separado de
   `FileAsset`**: los adjuntos de chat no van a la biblioteca). Texto, imagen, audio, video;
@@ -148,17 +172,32 @@ de que se está construyendo una entidad paralela por accidente.
 - [ ] **Historial REST**: `GET /api/conversations`, `GET /api/conversations/:id/messages`.
 
 ## Fase 7 — Notificaciones (módulo extraíble)
+**Modelo: bloque D (Opus 5) → bloque I (Sonnet 5).** Disparador 4, y el caso más claro de todo el
+roadmap: el módulo tiene que quedar **extraíble a microservicio** (tablas con prefijo propio y sin
+FKs, comunicación solo por eventos, su plan de extracción escrito). Esa disciplina se pierde con
+un solo atajo —una FK "que no molesta a nadie"— y recuperarla después cuesta la extracción
+entera. El bloque D fija esas fronteras; el resto (listeners, API de lectura, namespace de socket,
+centro de notificaciones en los clientes) es Sonnet 5.
 - [ ] **Módulo `notifications`** siguiendo al pie de la letra `ARCHITECTURE.md`: solo consume
   eventos (`post.liked`, `comment.created`, `message.sent`, `post.created`, `user.followed`),
   tablas con prefijo propio y sin FKs, API de lectura + namespace de socket propio, y su
   `AGENTS.md` con el **plan de extracción** a microservicio documentado.
 
 ## Fase 8 — Mercado (sin pagos)
+**Modelo: Sonnet 5 toda la fase**, revisión final incluida. `MarketItem` ya tiene su forma exacta
+en `API-CONTRACTS.md` y los pagos —lo único genuinamente delicado— están fuera de alcance hasta la
+Fase 12. Es CRUD con una categoría obligatoria: no dispara nada.
 - [ ] **Módulo `market`**: `MarketItem` con categoría obligatoria (`SERVICE|ARTWORK|EVENT|
   RESOURCE`), CRUD del vendedor, listado público, compartir al feed propio. Los pagos NO van
   aquí (Fase 12).
 
 ## Fase 9 — Búsqueda y explore
+**Modelo: bloque D (Opus 5, corto) → bloque I (Sonnet 5).** Disparadores 2 y 3 a la vez: el orden
+de resultados usa la afinidad (matemática) y **toda** consulta tiene que pasar por la regla de
+visibilidad (privacidad). Una búsqueda que filtra mal es la fuga más fácil de todo el producto:
+devuelve contenido privado a quien no debería verlo, y el bug se ve como "salió un resultado de
+más". El bloque D revisa exactamente ese cruce; `ILIKE`/pg_trgm, el índice GIN, los endpoints y la
+UI de explore son Sonnet 5.
 - [ ] **Módulo `search`**: `GET /api/search?q=&type=users|posts|notes|market&category=` — usuarios
   por username/nombre, palabras clave en descripciones **y etiquetas** de posts, **título y texto
   de las notas** (`type=notes`, Fase 4.6), ítems de market con filtro por categoría. Aplica la regla de visibilidad de la Fase 3 y el **orden
@@ -169,22 +208,36 @@ de que se está construyendo una entidad paralela por accidente.
   descubrimiento de la sección de búsqueda se alimenta de la afinidad de cada usuario.
 
 ## Fase 10 — Grupos de profesores
+**Modelo: bloque D (Opus 5) → bloque I (Sonnet 5).** Disparadores 1 y 3: cinco entidades nuevas y,
+sobre todo, un eje de permisos que hoy no existe (el profesor ve trabajos de sus alumnos, el
+alumno decide si su entrega va a su feed, el archivo queda en **su** biblioteca). Ese "quién ve
+qué" es la parte que hay que dejar escrita antes de tocar código; las tablas, los endpoints y las
+tablas de calificaciones de la web son Sonnet 5.
 - [ ] **Módulo `groups`**: `Group`, `GroupMember`, `GroupFolder`, `Submission`, `Grade` (ver
   `DATA-MODEL.md`). Profesor (rol TEACHER) crea grupos/carpetas de curso; el alumno entrega
   (el archivo queda en SU biblioteca y decide si publicarlo); el profesor lista alumnos y
   trabajos en formato tabular y califica.
 
 ## Fase 11 — Administración y soporte
+**Modelo: bloque D (Opus 5) → bloque I (Sonnet 5).** Disparador 3 en su forma más pura: permisos
+elevados sobre todo el producto y **delegación** de esos permisos a soporte (`SupportGrant`).
+Además el alcance sigue sin definirse con el dueño (pregunta abierta #2), así que el bloque D es
+también donde se acota. Las vistas y los endpoints, una vez acotados: Sonnet 5.
 - [ ] **Módulo `admin`** completo: visualización global (usuarios, recursos, chats) solo ADMIN;
   delegación de permisos de visualización a SUPPORT (`SupportGrant`). Alcance fino por
   determinar con el dueño — implementar lo mínimo útil y documentar.
 
 ## Fase 12 — Futuro (no empezar sin el dueño del producto)
+**Modelo: Opus 5, con el dueño del producto presente.** Pagos reales y datos de identidad
+contrastados contra una universidad: dinero e identidad, las dos cosas donde un error no se
+arregla con un despliegue. No se empieza sin él, así que tampoco se elige modelo por costo.
 - [ ] **Pagos del market** (proveedor detrás de interfaz, ver `ARCHITECTURE.md`).
 - [ ] **Validación con la Universidad de Antioquia**: contraste de cédulas y otorgamiento
   automático del rol TEACHER (integración detrás de interfaz).
 
 ## Transversales (cuando toque)
+**Modelo: Sonnet 5**, salvo el rate limiting y la auditoría de acciones admin/soporte, que son
+disparador 3 y llevan un bloque D corto en Opus 5 antes de implementarse.
 - [ ] Semillas (`prisma/seed.ts`) con usuarios de cada rol.
 - [ ] Rate limiting fino y auditoría de acciones admin/soporte.
 - [ ] E2E de flujos críticos (auth, posts, visibilidad, chat).

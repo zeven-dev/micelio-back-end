@@ -105,6 +105,38 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-07 — Política de modelos por fase y tarea (tarea, proceso entre repos)
+- **Listo:** `ORCHESTRATION.md` reemplaza la tabla abstracta de "Modelos por rol" (que decía
+  "razonamiento alto"/"balanceado", sin nombres) por una política concreta, pedida por el dueño
+  del producto: **la regla base es Sonnet 5** y Opus 5 queda restringido a una **lista cerrada de
+  seis disparadores** — decidir una forma de contrato que consumen los tres repos, matemática
+  exacta (feed, afinidad, orden de búsqueda), frontera de permisos/privacidad, tocar
+  `ARCHITECTURE.md`, un gate que falla o una ambigüedad real, y la revisión final de una fase que
+  tocó back-end.
+- **La parte que de verdad ahorra no es la elección, es el agrupamiento.** Alternar modelos
+  dentro de una fase obliga a recargar el contexto del repo cada vez, así que una fase se ejecuta
+  en **dos bloques con un solo handoff**: bloque D (Opus 5, corto, **no escribe código** — deja la
+  forma exacta escrita en `API-CONTRACTS.md`/`DATA-MODEL.md`) y bloque I (Sonnet 5, todo el resto,
+  **no decide formas de datos**). El criterio de salida del bloque D es que un agente que no
+  participó en la decisión pueda implementarla sin volver a decidir nada — que es justamente lo
+  que hace barato el bloque I.
+- **No se cambia de modelo en caliente:** si aparece un disparador a mitad del bloque I, se anota
+  y se junta para un bloque D corto al final o en la fase siguiente. **Única excepción:** los
+  permisos y la privacidad, que sí paran la implementación en el acto — seguir construyendo sobre
+  una frontera mal puesta cuesta más que perder el agrupamiento.
+- **Asignación por fase** (línea "**Modelo**" en cada fase del `ROADMAP.md`): 4.6 notas → Sonnet 5
+  completa (su diseño ya quedó cerrado hoy; solo la revisión final es Opus 5); 5 ranking, 6 chat,
+  7 notificaciones, 9 búsqueda, 10 grupos y 11 admin → bloque D + bloque I; 8 market → Sonnet 5
+  completa (contrato ya escrito, sin pagos); 12 futuro → Opus 5 con el dueño presente;
+  transversales → Sonnet 5 salvo rate limiting y auditoría.
+- **Falta:** nada de esta tarea. Es documentación de proceso; no se tocó código.
+- **Necesito:** que el dueño confirme la lista de seis disparadores, sobre todo dos decisiones
+  discutibles: (1) la Fase 8 (market) quedó **entera** en Sonnet 5 porque `MarketItem` ya tiene su
+  forma exacta escrita y los pagos están fuera de alcance — si quiere revisión de Opus ahí, es una
+  línea; (2) la Fase 4.6 arranca directo en Sonnet 5 apoyándose en que el diseño de las notas ya
+  está cerrado, lo cual es cierto **si** valida ese diseño (ver la entrada anterior).
+- **Sigue:** Fase 4.6 (notas) en este repo, en Sonnet 5.
+
 ### 2026-09-07 — Notas y rediseño de perfil: planeación + Fase 4.5 (cierre de fase)
 - **Listo (planeación, tres repos):** el dueño del producto pidió tres cosas — notas tipo
   columna de opinión, cabecera de perfil rediseñada (banner + contadores) y paleta nueva — y las

@@ -80,15 +80,75 @@ El reporte de una sesión o subagente hijo es una afirmación, no una verificaci
 - Un hijo no hace commit ni push por su cuenta salvo instrucción explícita del jefe. El jefe
   revisa el resultado y decide cuándo commitear/pushear.
 
-## Modelos por rol
+## Qué modelo usa cada cosa (decisión del dueño del producto, 2026-09-07)
 
-| Rol | Modelo | Por qué |
-| --- | --- | --- |
-| Jefe (orquestación, gates, verificación) | Razonamiento alto | Pocas llamadas, pero cada decisión de gate afecta los tres repos — no es el lugar para ahorrar. |
-| Hijo que implementa código de producto | Balanceado (el modelo por defecto de la sesión) | Es la mayoría del gasto de tokens; el punto óptimo costo/calidad para escribir código real. |
-| Subagente de exploración/búsqueda | Ligero | Ubicar archivos o mapear dependencias no necesita razonamiento profundo. |
-| Verificación de contrato/tokens de diseño | Ninguno — script determinístico (diff, build, typecheck) | Más barato y más confiable que pedirle a un modelo que "revise si coinciden". |
-| Revisión de código antes de cerrar una fase | Esfuerzo alto (`/code-review` en high/max) | Un bug atrapado aquí cuesta una fracción de lo que cuesta atraparlo ya propagado a otro repo. |
+**La regla base es Sonnet 5.** No es un modelo "de respaldo": es el modelo con el que se escribe
+la mayor parte de este proyecto. Opus 5 se reserva para una **lista cerrada** de disparadores, y
+fuera de ellos usarlo no compra nada — solo gasta.
+
+### Cuándo Opus 5, sí o sí
+
+Solo si la tarea cumple **al menos uno** de estos seis disparadores:
+
+1. **Se decide una forma de datos o de contrato** que van a consumir los tres repos: entidad
+   nueva, endpoint nuevo, un campo que se agrega a `UserPublic`/`Post`. Equivocarse aquí no es un
+   bug de un repo, es retrabajo en tres.
+2. **Se escribe o se cambia un algoritmo con matemática exacta**: el orden del home feed, los
+   pesos y el decaimiento de afinidad, el orden de resultados de búsqueda. Son deterministas por
+   diseño; un error de fórmula no lo atrapa ningún `type-check`.
+3. **Se toca la frontera de permisos o privacidad**: la regla de visibilidad, los roles, quién ve
+   qué. Una fuga aquí es un incidente, no un ticket.
+4. **Se decide o se rompe algo de `ARCHITECTURE.md`**: módulo nuevo, ciclo entre módulos, el
+   módulo extraíble de notificaciones.
+5. **Falla un gate o aparece una ambigüedad real** sin una opción "más simple" defendible (los
+   dos primeros casos de "Cuándo el jefe SÍ debe parar y preguntar").
+6. **Revisión final de una fase que tocó back-end** (`/code-review` en high/max). En una fase de
+   solo clientes, esa revisión también es Sonnet 5.
+
+### Todo lo demás es Sonnet 5
+
+Y "todo lo demás" es la mayoría del trabajo real, incluyendo cosas que parecen grandes:
+
+- **Implementar un contrato ya cerrado**: endpoints, DTOs, validaciones, migraciones a partir de
+  un esquema ya acordado. Si la forma ya está escrita en `API-CONTRACTS.md` y `DATA-MODEL.md`, lo
+  que queda es transcribirla bien, no decidirla.
+- **Todo el trabajo de cliente**, sin excepción práctica: pantallas, componentes, estados de
+  carga/vacío/error, animaciones ya especificadas, tokens, `sync:api`, `sync:design`.
+- **Pruebas** de comportamiento ya especificado.
+- **Documentación que transcribe decisiones ya tomadas** (`STATUS.md`, `PROCESSES.md`, los
+  `AGENTS.md` de módulo).
+- **Exploración y búsqueda** en el repo.
+- **Verificación mecánica**: `lint`/`build`/`test`/`type-check`, revisar el `openapi.json`. Eso no
+  lo hace un modelo grande — lo hace el comando, y cualquier modelo lee su salida.
+
+### Cómo se agrupa (esto es lo que de verdad ahorra)
+
+Alternar modelos dentro de una fase es lo caro: cada cambio obliga a recargar el contexto del
+repo desde cero. Por eso **una fase se ejecuta en dos bloques como máximo, en este orden y con un
+solo handoff**:
+
+- **Bloque D — diseño (Opus 5, corto).** Solo si la fase dispara alguno de los seis puntos de
+  arriba. **No escribe código de producto**: escribe la forma exacta en `API-CONTRACTS.md`,
+  `DATA-MODEL.md` y, si aplica, la desviación en `ARCHITECTURE.md`. Termina cuando un agente que
+  no participó en la decisión puede implementarla sin volver a decidir nada. Ese es el criterio
+  de salida, y es también lo que hace barato el bloque siguiente.
+- **Bloque I — implementación (Sonnet 5).** Todo el resto de la fase, back-end y clientes:
+  esquema, endpoints, pruebas, UI, documentación de cierre. **No decide formas de datos**; si
+  necesita decidir una, es que el bloque D no terminó.
+
+Reglas del handoff:
+
+- **No se cambia de modelo en caliente.** Si a mitad del bloque I aparece un disparador, no se
+  escala en el momento: se anota en `docs/STATUS.md` y se junta con los demás para un bloque D
+  corto —al final de esta fase o al principio de la siguiente—. La excepción es el disparador 3
+  (permisos y privacidad): eso **sí** para la implementación en el acto, porque seguir
+  construyendo sobre una frontera mal puesta es peor que perder el agrupamiento.
+- **Fases de solo clientes no tienen bloque D.** Entran directo en Sonnet 5, incluida su revisión
+  final. La única forma de que una fase de cliente necesite Opus 5 es que descubra un hueco en el
+  contrato — y eso, por el principio de "back-end primero", ya no es trabajo de cliente: se
+  detiene, se anota y se resuelve como bloque D en back-end.
+- **Cada fase del `ROADMAP.md` de los tres repos dice qué bloque le toca** en su línea
+  "**Modelo**". Si una fase no la tiene, es Sonnet 5.
 
 ## Consistencia front ↔ app
 
