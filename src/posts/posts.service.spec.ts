@@ -22,6 +22,7 @@ const authorView: UserPublicView = {
   bannerUrl: null,
   isPublic: true,
   postsCount: 0,
+  notesCount: 0,
   followersCount: 0,
   followingCount: 0,
   viewerFollows: false,
@@ -32,13 +33,45 @@ function postRow(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'post-1',
     authorId: AUTHOR_ID,
+    kind: 'MEDIA',
     description: null,
     tags: [],
     position: 0,
+    title: null,
+    coverFileAssetId: null,
     createdAt: new Date('2026-09-01T10:00:00.000Z'),
     updatedAt: new Date('2026-09-01T10:00:00.000Z'),
     media: [
       { id: 'media-1', postId: 'post-1', fileAssetId: 'file-1', order: 0, width: 800, height: 600 },
+    ],
+    blocks: [],
+    ...overrides,
+  };
+}
+
+function noteRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: 'note-1',
+    authorId: AUTHOR_ID,
+    kind: 'NOTE',
+    description: null,
+    tags: [],
+    position: 0,
+    title: 'Sobre el proceso',
+    coverFileAssetId: null,
+    createdAt: new Date('2026-09-01T10:00:00.000Z'),
+    updatedAt: new Date('2026-09-01T10:00:00.000Z'),
+    media: [],
+    blocks: [
+      {
+        id: 'block-1',
+        postId: 'note-1',
+        position: 0,
+        type: 'PARAGRAPH',
+        text: 'Hola mundo',
+        fileAssetId: null,
+        caption: null,
+      },
     ],
     ...overrides,
   };
@@ -56,6 +89,7 @@ describe('PostsService', () => {
       delete: jest.Mock;
     };
     postMedia: { deleteMany: jest.Mock };
+    postBlock: { deleteMany: jest.Mock };
     savedPost: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -87,6 +121,7 @@ describe('PostsService', () => {
         delete: jest.fn().mockResolvedValue(undefined),
       },
       postMedia: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      postBlock: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
       savedPost: { findMany: jest.fn().mockResolvedValue([]) },
       // Soporta las dos formas que usa el servicio: callback (crear/editar) y arreglo (reorder).
       $transaction: jest.fn(async (arg: unknown) =>
@@ -169,7 +204,7 @@ describe('PostsService', () => {
       await service.create(AUTHOR_ID, { media: [{ fileAssetId: 'file-1' }] });
 
       expect(prisma.post.updateMany).toHaveBeenCalledWith({
-        where: { authorId: AUTHOR_ID },
+        where: { authorId: AUTHOR_ID, kind: 'MEDIA' },
         data: { position: { increment: 1 } },
       });
       expect(prisma.post.create).toHaveBeenCalledWith(
@@ -253,7 +288,7 @@ describe('PostsService', () => {
       const post = await service.findOne('post-1', AUTHOR_ID);
 
       expect(storage.getSignedDownloadUrl).toHaveBeenCalledWith('users/a/f/1.png', 300);
-      expect(post.media[0]).toEqual(
+      expect(post.media![0]).toEqual(
         expect.objectContaining({
           type: FileType.IMAGE,
           url: 'https://signed.example/download',
@@ -261,7 +296,7 @@ describe('PostsService', () => {
           height: 600,
         }),
       );
-      expect(post.media[0].expiresAt.getTime()).toBeGreaterThan(Date.now());
+      expect(post.media![0].expiresAt.getTime()).toBeGreaterThan(Date.now());
     });
 
     // Las dimensiones son del archivo de biblioteca; el post solo las pisa si el cliente manda
@@ -284,7 +319,7 @@ describe('PostsService', () => {
 
       const post = await service.findOne('post-1', AUTHOR_ID);
 
-      expect(post.media[0]).toEqual(expect.objectContaining({ width: 1600, height: 900 }));
+      expect(post.media![0]).toEqual(expect.objectContaining({ width: 1600, height: 900 }));
     });
 
     it('el override del medio gana sobre las del archivo', async () => {
@@ -292,7 +327,7 @@ describe('PostsService', () => {
 
       const post = await service.findOne('post-1', AUTHOR_ID);
 
-      expect(post.media[0]).toEqual(expect.objectContaining({ width: 800, height: 600 }));
+      expect(post.media![0]).toEqual(expect.objectContaining({ width: 800, height: 600 }));
     });
 
     it('404 si la publicación no existe', async () => {
@@ -352,6 +387,41 @@ describe('PostsService', () => {
         ForbiddenException,
       );
     });
+
+    // Fase 4.6: el tab Publicaciones no debe mostrar notas — tienen su propio listado.
+    it('filtra kind: MEDIA para no mezclar notas en el tab Publicaciones', async () => {
+      prisma.post.findMany.mockResolvedValue([postRow()]);
+      await service.findByUsername('ada', VIEWER_ID, {});
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ kind: 'MEDIA' }) }),
+      );
+    });
+  });
+
+  // Fase 4.6: mismo patrón de paginación que `findByUsername`, pero por `createdAt` descendente
+  // (las notas no tienen orden curado) y filtrando `kind: NOTE`.
+  describe('findNotesByUsername', () => {
+    it('lista por createdAt descendente filtrando kind: NOTE', async () => {
+      prisma.post.findMany.mockResolvedValue([noteRow()]);
+
+      const page = await service.findNotesByUsername('ada', VIEWER_ID, { limit: 2 });
+
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ kind: 'NOTE' }),
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        }),
+      );
+      expect(page.items).toHaveLength(1);
+      expect(page.items[0].kind).toBe('NOTE');
+    });
+
+    it('403 si el perfil es privado para el viewer', async () => {
+      users.canViewContentOf.mockResolvedValue(false);
+      await expect(service.findNotesByUsername('ada', VIEWER_ID, {})).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
   });
 
   describe('reorder', () => {
@@ -380,6 +450,19 @@ describe('PostsService', () => {
       await expect(
         service.reorder(AUTHOR_ID, { orderedIds: ['post-1', 'post-1'] }),
       ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    // Fase 4.6: `owned` solo trae MEDIA, así que el id de una nota nunca calza con el conjunto
+    // esperado — mismo 400 que cualquier otro desajuste, sin código especial para notas.
+    it('400 si orderedIds trae el id de una nota', async () => {
+      prisma.post.findMany.mockResolvedValue([{ id: 'post-1' }]);
+
+      await expect(
+        service.reorder(AUTHOR_ID, { orderedIds: ['post-1', 'note-1'] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.post.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { authorId: AUTHOR_ID, kind: 'MEDIA' } }),
+      );
     });
   });
 
@@ -423,6 +506,147 @@ describe('PostsService', () => {
       prisma.post.findUnique.mockResolvedValue(postRow());
       await service.remove('post-1', AUTHOR_ID);
       expect(prisma.post.delete).toHaveBeenCalledWith({ where: { id: 'post-1' } });
+    });
+
+    // Fase 4.6: el cuerpo de una nota es otro; `PATCH /api/posts/notes/:id` es su endpoint.
+    it('400 si el PATCH genérico manda media sobre una nota', async () => {
+      prisma.post.findUnique.mockResolvedValue(noteRow());
+
+      await expect(
+        service.update('note-1', AUTHOR_ID, { media: [{ fileAssetId: 'file-1' }] }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  // Fase 4.6: una nota es un `Post` con `kind: NOTE`. Estas pruebas cubren lo que le es propio
+  // (validación de bloques, fusión de etiquetas, reemplazo de la lista al editar); el resto
+  // (visibilidad, interacciones) ya está cubierto arriba porque comparte el mismo camino.
+  describe('notas', () => {
+    const paragraphBlock = { type: 'PARAGRAPH', text: 'Cuerpo de la nota #arte' };
+
+    it('crea la nota con kind NOTE y fusiona los hashtags del título y los bloques', async () => {
+      prisma.post.create.mockResolvedValueOnce(noteRow());
+
+      await service.createNote(AUTHOR_ID, {
+        title: 'Sobre el #proceso',
+        blocks: [paragraphBlock] as never,
+      });
+
+      expect(prisma.post.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            kind: 'NOTE',
+            title: 'Sobre el #proceso',
+            tags: ['proceso', 'arte'],
+          }),
+        }),
+      );
+    });
+
+    it('no incrementa la posición de las publicaciones MEDIA del autor', async () => {
+      prisma.post.create.mockResolvedValueOnce(noteRow());
+      await service.createNote(AUTHOR_ID, { title: 'Título', blocks: [paragraphBlock] as never });
+      expect(prisma.post.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('400 si un bloque IMAGE no trae fileAssetId (delegado a assertBlocksAreValid)', async () => {
+      await expect(
+        service.createNote(AUTHOR_ID, {
+          title: 'Título',
+          blocks: [{ type: 'IMAGE' }] as never,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.post.create).not.toHaveBeenCalled();
+    });
+
+    it('400 si la portada o una imagen de bloque no es de tipo IMAGE', async () => {
+      files.findOwnedByUser.mockResolvedValueOnce([
+        { id: 'file-1', type: FileType.VIDEO, key: 'users/a/f/1.mp4', width: null, height: null },
+      ]);
+
+      await expect(
+        service.createNote(AUTHOR_ID, {
+          title: 'Título',
+          coverFileAssetId: 'file-1',
+          blocks: [paragraphBlock] as never,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('404/403 de la biblioteca se propagan tal cual (findOwnedByUser)', async () => {
+      files.findOwnedByUser.mockRejectedValueOnce(new NotFoundException());
+      await expect(
+        service.createNote(AUTHOR_ID, {
+          title: 'Título',
+          blocks: [{ type: 'IMAGE', fileAssetId: 'ajeno' }] as never,
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('edita el título y reemplaza la lista completa de bloques', async () => {
+      prisma.post.findUnique.mockResolvedValue(noteRow());
+      prisma.post.update.mockResolvedValueOnce(noteRow({ title: 'Editado' }));
+
+      await service.updateNote('note-1', AUTHOR_ID, {
+        title: 'Editado',
+        blocks: [paragraphBlock] as never,
+      });
+
+      expect(prisma.postBlock.deleteMany).toHaveBeenCalledWith({ where: { postId: 'note-1' } });
+      expect(prisma.post.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            title: 'Editado',
+            blocks: {
+              create: [
+                {
+                  position: 0,
+                  type: 'PARAGRAPH',
+                  text: paragraphBlock.text,
+                  fileAssetId: null,
+                  caption: null,
+                },
+              ],
+            },
+          }),
+        }),
+      );
+    });
+
+    it('no toca los bloques si el body no los trae', async () => {
+      prisma.post.findUnique.mockResolvedValue(noteRow());
+      await service.updateNote('note-1', AUTHOR_ID, { title: 'Solo el título' });
+      expect(prisma.postBlock.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('400 al llamar updateNote sobre una publicación MEDIA', async () => {
+      prisma.post.findUnique.mockResolvedValue(postRow());
+      await expect(service.updateNote('post-1', AUTHOR_ID, { title: 'x' })).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+    });
+
+    it('403 al editar una nota ajena', async () => {
+      prisma.post.findUnique.mockResolvedValue(noteRow({ authorId: 'otro' }));
+      await expect(service.updateNote('note-1', AUTHOR_ID, { title: 'x' })).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    // La forma de respuesta: `kind: NOTE` omite `media`/`position` y trae title/excerpt/blocks.
+    it('la respuesta de una nota trae title/excerpt/blocks y omite media/position', async () => {
+      prisma.post.findUnique.mockResolvedValue(noteRow());
+
+      const post = await service.findOne('note-1', AUTHOR_ID);
+
+      expect(post.kind).toBe('NOTE');
+      expect(post.title).toBe('Sobre el proceso');
+      expect(post.excerpt).toBe('Hola mundo');
+      expect(post.blocks).toEqual([
+        expect.objectContaining({ position: 0, type: 'PARAGRAPH', text: 'Hola mundo' }),
+      ]);
+      expect(post.media).toBeUndefined();
+      expect(post.position).toBeUndefined();
     });
   });
 

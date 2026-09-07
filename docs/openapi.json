@@ -654,6 +654,87 @@
         ]
       }
     },
+    "/posts/notes": {
+      "post": {
+        "operationId": "PostsController_createNote",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/posts/notes/{id}": {
+      "patch": {
+        "operationId": "PostsController_updateNote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PostResponseDto"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/posts/{id}": {
       "get": {
         "operationId": "PostsController_findOne",
@@ -866,6 +947,76 @@
                           "type": "array",
                           "items": {
                             "$ref": "#/components/schemas/SavedPostItemDto"
+                          }
+                        },
+                        "nextCursor": {
+                          "type": "string",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "posts"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/users/{username}/notes": {
+      "get": {
+        "operationId": "PostsController_findNotesByUsername",
+        "parameters": [
+          {
+            "name": "username",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "in": "query",
+            "description": "Cursor opaco devuelto por la página anterior.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/PostResponseDto"
                           }
                         },
                         "nextCursor": {
@@ -1934,7 +2085,11 @@
           },
           "postsCount": {
             "type": "number",
-            "description": "Publicaciones del usuario. Visible también en la vista limitada de un perfil privado: dice cuánto hay, no qué hay."
+            "description": "Publicaciones (`kind: MEDIA`) del usuario. Visible también en la vista limitada de un perfil privado: dice cuánto hay, no qué hay."
+          },
+          "notesCount": {
+            "type": "number",
+            "description": "Notas (`kind: NOTE`, Fase 4.6) del usuario. Misma visibilidad que `postsCount`."
           },
           "followersCount": {
             "type": "number"
@@ -1976,6 +2131,7 @@
           "bannerUrl",
           "isPublic",
           "postsCount",
+          "notesCount",
           "followersCount",
           "followingCount",
           "viewerFollows",
@@ -2105,7 +2261,11 @@
           },
           "postsCount": {
             "type": "number",
-            "description": "Publicaciones del usuario. Visible también en la vista limitada de un perfil privado: dice cuánto hay, no qué hay."
+            "description": "Publicaciones (`kind: MEDIA`) del usuario. Visible también en la vista limitada de un perfil privado: dice cuánto hay, no qué hay."
+          },
+          "notesCount": {
+            "type": "number",
+            "description": "Notas (`kind: NOTE`, Fase 4.6) del usuario. Misma visibilidad que `postsCount`."
           },
           "followersCount": {
             "type": "number"
@@ -2135,6 +2295,7 @@
           "bannerUrl",
           "isPublic",
           "postsCount",
+          "notesCount",
           "followersCount",
           "followingCount",
           "viewerFollows",
@@ -2248,11 +2409,84 @@
           "height"
         ]
       },
+      "PostImageResponseDto": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true
+          },
+          "height": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "url",
+          "expiresAt",
+          "width",
+          "height"
+        ]
+      },
+      "PostBlockResponseDto": {
+        "type": "object",
+        "properties": {
+          "position": {
+            "type": "number"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "PARAGRAPH",
+              "HEADING",
+              "QUOTE",
+              "IMAGE"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "nullable": true
+          },
+          "caption": {
+            "type": "string",
+            "nullable": true
+          },
+          "image": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostImageResponseDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "position",
+          "type",
+          "text",
+          "caption",
+          "image"
+        ]
+      },
       "PostResponseDto": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "MEDIA",
+              "NOTE"
+            ]
           },
           "author": {
             "$ref": "#/components/schemas/UserPublicView"
@@ -2267,18 +2501,9 @@
               "type": "string"
             }
           },
-          "position": {
-            "type": "number"
-          },
           "createdAt": {
             "format": "date-time",
             "type": "string"
-          },
-          "media": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PostMediaResponseDto"
-            }
           },
           "viewerHasLiked": {
             "type": "boolean"
@@ -2291,16 +2516,44 @@
           },
           "commentCount": {
             "type": "number"
+          },
+          "position": {
+            "type": "number"
+          },
+          "media": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostMediaResponseDto"
+            }
+          },
+          "title": {
+            "type": "string"
+          },
+          "excerpt": {
+            "type": "string"
+          },
+          "cover": {
+            "nullable": true,
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/PostImageResponseDto"
+              }
+            ]
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PostBlockResponseDto"
+            }
           }
         },
         "required": [
           "id",
+          "kind",
           "author",
           "description",
           "tags",
-          "position",
           "createdAt",
-          "media",
           "viewerHasLiked",
           "viewerHasSaved",
           "commentCount"
@@ -2383,6 +2636,99 @@
         "required": [
           "reordered"
         ]
+      },
+      "NoteBlockInputDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "PARAGRAPH",
+              "HEADING",
+              "QUOTE",
+              "IMAGE"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "Texto de PARAGRAPH/HEADING/QUOTE. Prohibido en IMAGE."
+          },
+          "fileAssetId": {
+            "type": "string",
+            "description": "Imagen de la biblioteca del autor. Obligatorio en IMAGE, prohibido en el resto."
+          },
+          "caption": {
+            "type": "string",
+            "description": "Pie de foto opcional de un bloque IMAGE."
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "CreateNoteDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Sobre el proceso"
+          },
+          "tags": {
+            "description": "Etiquetas explícitas. El servidor las normaliza y les suma los #hashtags del título y de los bloques de texto; si tras normalizar quedan más de 10, responde 400.",
+            "example": [
+              "opinión",
+              "proceso"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverFileAssetId": {
+            "type": "string",
+            "description": "Imagen de portada de la biblioteca del autor. Si falta, la tarjeta usa la primera imagen de `blocks`."
+          },
+          "blocks": {
+            "description": "Cuerpo de la nota, en orden de lectura.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteBlockInputDto"
+            }
+          }
+        },
+        "required": [
+          "title",
+          "blocks"
+        ]
+      },
+      "UpdateNoteDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "example": "Versión final del proceso"
+          },
+          "tags": {
+            "example": [
+              "opinión",
+              "proceso"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "coverFileAssetId": {
+            "type": "string",
+            "nullable": true
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NoteBlockInputDto"
+            }
+          }
+        }
       },
       "UpdatePostDto": {
         "type": "object",

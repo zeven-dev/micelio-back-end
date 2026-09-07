@@ -4,7 +4,8 @@
 que otros módulos leen o escriben usuarios (nunca consultar la tabla `users` con Prisma desde
 otro módulo).
 
-## Contrato actual (Fase 0; avatar a subida directa en 0.5; portada y `postsCount` en 4.5)
+## Contrato actual (Fase 0; avatar a subida directa en 0.5; portada y `postsCount` en 4.5;
+`notesCount` en 4.6)
 - `GET /api/users/me` — `Me` completo (`UserPublic` + `email` + `role`); nunca incluye `cedula`.
 - `PATCH /api/users/me` — parcial `{ name?, bio?, isPublic?, feedSettings? }`. `feedSettings`
   es parcial dentro de parcial (`{ layout?, columns?, gap? }`, Fase 2): la clave ausente no se
@@ -45,11 +46,13 @@ otro módulo).
   - `getPublicViewsByIds(ids, viewerId?)` — `UserPublic` de varios usuarios de un golpe
     (evita una consulta y una firma de avatar por publicación).
 
-## Conteo de publicaciones (Fase 4.5)
-- `postsCount` de `UserPublic` lo aporta `PostsService.countByAuthorIds`: el conteo es un dato
-  de `posts`, así que este módulo **no** cuenta la tabla `posts` con Prisma (regla 7). Se pide
-  batched, una sola vez por página de perfiles, igual que el grafo.
-- Se devuelve **también** en la vista limitada de un perfil privado (dice cuánto hay, no qué hay).
+## Conteo de publicaciones y notas (Fase 4.5 y 4.6)
+- `postsCount`/`notesCount` de `UserPublic` los aporta `PostsService.countByAuthorIds(ids, kind)`
+  — una llamada con `'MEDIA'` y otra con `'NOTE'` —: el conteo es un dato de `posts`, así que
+  este módulo **no** cuenta la tabla `posts` con Prisma (regla 7). Se piden batched, una sola vez
+  por página de perfiles, igual que el grafo.
+- Ambos se devuelven **también** en la vista limitada de un perfil privado (dicen cuánto hay, no
+  qué hay).
 - `users` y `posts` se inyectan con `forwardRef` por el ciclo que esto crea — misma forma y misma
   justificación que el ciclo con `social`; ver la desviación 5 de `docs/ARCHITECTURE.md`.
 

@@ -18,10 +18,12 @@ import {
   CursorPaginationDto,
 } from '../common/dto/cursor-pagination.dto';
 import { ALL_ROLES, Roles } from '../common/decorators/roles.decorator';
+import { CreateNoteDto } from './dto/create-note.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
 import { SavedPostItemDto } from './dto/save-response.dto';
+import { UpdateNoteDto } from './dto/update-note.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
 
@@ -53,6 +55,26 @@ export class PostsController {
   @ApiOkResponse({ type: ReorderResponseDto })
   reorder(@CurrentUser() user: AuthenticatedUser, @Body() dto: ReorderPostsDto) {
     return this.postsService.reorder(user.id, dto);
+  }
+
+  /**
+   * Una nota es un `Post` con `kind: NOTE` (Fase 4.6): mismo `Post` de siempre, cuerpo propio.
+   * `GET /api/posts/:id` y `DELETE /api/posts/:id` de abajo sirven ambos `kind` sin cambios.
+   */
+  @Post('posts/notes')
+  @ApiCreatedResponse({ type: PostResponseDto })
+  createNote(@CurrentUser() user: AuthenticatedUser, @Body() dto: CreateNoteDto) {
+    return this.postsService.createNote(user.id, dto);
+  }
+
+  @Patch('posts/notes/:id')
+  @ApiOkResponse({ type: PostResponseDto })
+  updateNote(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateNoteDto,
+  ) {
+    return this.postsService.updateNote(id, user.id, dto);
   }
 
   @Get('posts/:id')
@@ -95,5 +117,17 @@ export class PostsController {
   @ApiCursorPaginatedResponse(SavedPostItemDto)
   saved(@CurrentUser() user: AuthenticatedUser, @Query() query: CursorPaginationDto) {
     return this.postsService.listSaved(user.id, query);
+  }
+
+  /** Notas de un perfil (Fase 4.6), separadas del tab Publicaciones (`findByUsername` filtra
+   * `kind: MEDIA`). Mismas reglas de visibilidad. */
+  @Get('users/:username/notes')
+  @ApiCursorPaginatedResponse(PostResponseDto)
+  findNotesByUsername(
+    @Param('username') username: string,
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: CursorPaginationDto,
+  ) {
+    return this.postsService.findNotesByUsername(username, user.id, query);
   }
 }

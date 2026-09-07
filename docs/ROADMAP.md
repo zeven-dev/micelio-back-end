@@ -111,7 +111,7 @@ están los dos datos que hoy no existen y que la cabecera nueva necesita.
 - [x] **Contrato exportado**: `npm run api:export` con `bannerUrl`/`postsCount` en el schema de
   `UserPublic`, para que los clientes corran `sync:api` antes de empezar su parte.
 
-## Fase 4.6 — Notas (columnas de opinión)
+## Fase 4.6 — Notas (columnas de opinión) — **cerrada 2026-09-07**
 **Modelo: Sonnet 5 toda la fase.** No lleva bloque D: el diseño (una nota es un `Post` con
 `kind: NOTE`, la forma completa, los tres endpoints, las reglas por tipo de bloque) **ya se
 decidió y quedó escrito** el 2026-09-07 en `API-CONTRACTS.md`, `DATA-MODEL.md` y
@@ -124,20 +124,20 @@ el porqué y las dos alternativas descartadas están en `ARCHITECTURE.md` (desvi
 `DATA-MODEL.md`. Todo lo que ya existe para publicaciones (likes, guardados, comentarios, home
 feed, visibilidad) debe funcionar sobre notas **sin código nuevo**; si algo lo necesita, es señal
 de que se está construyendo una entidad paralela por accidente.
-- [ ] **Esquema**: enum `PostKind (MEDIA|NOTE)` + `title`, `coverFileAssetId` en `Post`; tabla
+- [x] **Esquema**: enum `PostKind (MEDIA|NOTE)` + `title`, `coverFileAssetId` en `Post`; tabla
   `PostBlock` (`position`, `type PARAGRAPH|HEADING|QUOTE|IMAGE`, `text`, `fileAssetId`,
   `caption`). La migración rellena `kind: MEDIA` en las filas existentes. *Dónde:*
   `prisma/schema.prisma`, `src/posts`. Campos exactos en `DATA-MODEL.md`.
-- [ ] **Endpoints**: `POST /api/posts/notes`, `PATCH /api/posts/notes/:id`,
+- [x] **Endpoints**: `POST /api/posts/notes`, `PATCH /api/posts/notes/:id`,
   `GET /api/users/:username/notes`. `GET /api/posts/:id` y `DELETE /api/posts/:id` sirven ambos
   `kind` sin cambios. Validaciones por tipo de bloque, `excerpt` derivado en el servidor y
   `reorder` rechazando notas: contrato exacto en `API-CONTRACTS.md` ("Notas — Fase 4.6").
-- [ ] **Home feed**: `GET /api/feed` incluye notas con el mismo algoritmo y el mismo cursor (una
+- [x] **Home feed**: `GET /api/feed` incluye notas con el mismo algoritmo y el mismo cursor (una
   nota es un post más para el ranking). Verificar que la consulta de candidatos no filtre por
   `kind` y que la forma de respuesta no cambie.
-- [ ] **`notesCount` en `UserPublic`** y `GET /api/users/:username/posts` filtrando
+- [x] **`notesCount` en `UserPublic`** y `GET /api/users/:username/posts` filtrando
   `kind: MEDIA`, para que el tab Publicaciones no muestre notas.
-- [ ] **Specs**: creación/edición de notas (validación por tipo de bloque, límite de 100 bloques,
+- [x] **Specs**: creación/edición de notas (validación por tipo de bloque, límite de 100 bloques,
   derivación del `excerpt`, rechazo en `reorder`) en `src/posts/*.spec.ts`.
 
 ## Fase 5 — Afinidad y ranking personalizado

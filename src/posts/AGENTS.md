@@ -1,28 +1,62 @@
 # Módulo `posts`
 
 **Responsabilidad:** publicaciones de cada usuario (descripción, etiquetas y medios tomados de
-su biblioteca), el **orden curado** de su feed propio (Fase 2), el **home feed** (Fase 3) y,
-desde el refactor del 2026-09-03, **likes, guardados y comentarios anidados** (Fase 4 — vivieron
-en `social` hasta ese refactor, ver "Ciclo con `social`" abajo).
+su biblioteca), el **orden curado** de su feed propio (Fase 2), el **home feed** (Fase 3),
+**likes, guardados y comentarios anidados** (Fase 4 — vivieron en `social` hasta el refactor del
+2026-09-03, ver "Ciclo con `social`" abajo) y, desde la Fase 4.6, **notas**: un `Post` con
+`kind: NOTE` en vez de una entidad propia (ver "Contrato actual — notas" abajo).
 
 ## Contrato actual — publicaciones y feed
 - `POST /api/posts` — `{ description?, tags?, media: [{ fileAssetId, width?, height? }] }` →
   `Post`. El orden del arreglo `media` **es** el orden del carrusel. Emite `post.created`.
 - `GET /api/posts/:id` — `Post`. `403` si el perfil del autor no es visible para el viewer.
 - `GET /api/users/:username/posts?cursor=&limit=` — paginado estándar del feed propio de ese
-  perfil, en el orden que curó su dueño (`position` asc, desempate `id` asc).
+  perfil, en el orden que curó su dueño (`position` asc, desempate `id` asc). Filtra
+  `kind: MEDIA` (Fase 4.6): las notas tienen su propio listado.
 - `PATCH /api/posts/:id` — `{ description?, tags?, media? }`. Parcial; **`media` presente
-  reemplaza la lista completa** (no hay deltas).
+  reemplaza la lista completa** (no hay deltas). `400` si se manda `media` sobre una nota (su
+  cuerpo es otro — ver `PATCH /api/posts/notes/:id` abajo).
 - `DELETE /api/posts/:id` — `204`. Los archivos siguen en la biblioteca; solo se borra la
-  publicación y sus `post_media`.
-- `PATCH /api/posts/reorder` — `{ orderedIds }` con **todas** las publicaciones del autor en el
-  nuevo orden → `{ reordered: true }`. `400` si el conjunto no coincide exactamente.
+  publicación y sus `post_media`/`post_blocks`. Sirve para ambos `kind` sin cambios.
+- `PATCH /api/posts/reorder` — `{ orderedIds }` con **todas las publicaciones `MEDIA`** del
+  autor en el nuevo orden → `{ reordered: true }`. `400` si el conjunto no coincide exactamente
+  (incluido el caso de que `orderedIds` traiga el id de una nota: `owned` solo trae `MEDIA`, así
+  que nunca calza).
 - `GET /api/feed?cursor=&limit=` — **home feed v1** (Fase 3): paginado estándar de `Post` con el
   algoritmo exacto de `API-CONTRACTS.md` (streams S y D, +12 h a favoritos, mezcla 4:1, cursor
-  doble). Determinista y sin aleatoriedad.
+  doble). Determinista y sin aleatoriedad. No filtra por `kind`: una nota es un post más.
 
 Formas exactas en [`docs/API-CONTRACTS.md`](../../docs/API-CONTRACTS.md) ("Post",
 "Publicaciones — Fase 2", "Reordenar el feed propio").
+
+## Contrato actual — notas (Fase 4.6)
+Una nota **es** un `Post` con `kind: NOTE` — no una entidad propia (ver `docs/ARCHITECTURE.md`,
+desviación 4, y `docs/DATA-MODEL.md`). Comparte tabla, likes, guardados, comentarios,
+visibilidad y home feed con las publicaciones `MEDIA` sin código nuevo.
+
+- `POST /api/posts/notes` — `{ title, tags?, coverFileAssetId?, blocks: [...] }` → `Post`
+  (`kind: NOTE`). Emite `post.created`, igual que una publicación.
+- `PATCH /api/posts/notes/:id` — mismo body, parcial; **`blocks` presente reemplaza la lista
+  completa**. `400` si `:id` no es una nota.
+- `GET /api/users/:username/notes?cursor=&limit=` — paginado estándar, orden `createdAt` desc
+  (las notas **no** usan `position`; no tienen orden curado).
+- `GET /api/posts/:id` y `DELETE /api/posts/:id` (arriba) sirven ambos `kind` sin cambios.
+
+Reglas de validación (`utils/note-blocks.util.ts`):
+- `assertBlocksAreValid`: por tipo de bloque — `PARAGRAPH`/`QUOTE` exigen `text` (máx 5000),
+  `HEADING` exige `text` (máx 140, tope propio y más corto), `IMAGE` exige `fileAssetId` y
+  prohíbe `text`. Se valida en el servicio, no con `@ValidateIf` encadenados en el DTO: la regla
+  depende de un campo hermano y un `BadRequestException` explícito es más claro.
+- `deriveExcerpt`: los primeros 200 caracteres del primer bloque `PARAGRAPH`, cortados en
+  palabra completa. Se **deriva en cada lectura** (`buildPostView`), no se persiste.
+- `noteTextForTags`: título + texto de todos los bloques, para extraer `#hashtags` con
+  `buildTags` (mismo normalizador que las publicaciones).
+- `assertNoteAssetsAreUsable` (en `posts.service.ts`): la portada y las imágenes de bloques
+  deben ser archivos **de tipo IMAGE** de la biblioteca del autor (`FilesService.findOwnedByUser`
+  resuelve 404/403; el tipo se valida aquí porque es una regla propia de notas).
+
+Formas exactas en `docs/API-CONTRACTS.md` ("Notas — Fase 4.6"). DTOs en
+`dto/create-note.dto.ts`, `dto/update-note.dto.ts`.
 
 ## Contrato actual — likes, guardados y comentarios (Fase 4)
 Handlers en `post-interactions.controller.ts` (`PostInteractionsController`) salvo
@@ -104,10 +138,10 @@ Formas exactas en `docs/API-CONTRACTS.md` ("Likes — Fase 4", "Guardados — Fa
 - `findManyByIdsForViewer(ids, viewerId)` — el `Post` completo (armado igual que cualquier otra
   lectura, medios firmados incluidos) para varios ids a la vez; hoy solo lo usa `listSaved` (uso
   interno al propio módulo, ya no cruza a `social`).
-- `countByAuthorIds(authorIds)` (Fase 4.5) — cuántas publicaciones tiene cada autor, en un solo
-  `groupBy`. Lo consume `users` para el `postsCount` de la cabecera de perfil, en vez de contar
-  esta tabla por su cuenta. Los autores sin publicaciones **no salen** del `groupBy`: quien
-  llama resuelve la ausencia como `0`.
+- `countByAuthorIds(authorIds, kind)` (Fase 4.5, con `kind` desde la 4.6) — cuántas filas de ese
+  `kind` tiene cada autor, en un solo `groupBy`. Lo consume `users` dos veces (`MEDIA` para
+  `postsCount`, `NOTE` para `notesCount`) en vez de contar esta tabla por su cuenta. Los autores
+  sin filas de ese `kind` **no salen** del `groupBy`: quien llama resuelve la ausencia como `0`.
 
 ## Ciclo con `social` — historia
 Durante la Fase 4, like/guardar/comentar se implementaron en `social` (por instrucción de su
@@ -135,4 +169,4 @@ que inyectan `UsersService` desde aquí. Ver la desviación 5 de `docs/ARCHITECT
 
 ## Pendiente (fases siguientes, no improvisar aquí)
 - **Feed v2** (Fase 5): el mismo endpoint gana los boosts por afinidad. La respuesta y el cursor
-  no cambian, así que los clientes no se tocan.
+  no cambian (notas incluidas), así que los clientes no se tocan.

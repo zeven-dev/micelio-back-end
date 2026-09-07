@@ -105,6 +105,52 @@ de archivos; si una fase se cierra, la entrada de cierre resume la fase completa
 
 ## Entradas
 
+### 2026-09-07 — Fase 4.6: notas (cierre de fase, back-end)
+- **Listo:**
+  - **Esquema**: `PostKind (MEDIA|NOTE)`, `PostBlockType (PARAGRAPH|HEADING|QUOTE|IMAGE)`,
+    `Post.title`/`Post.coverFileAssetId` y tabla `post_blocks` — migración
+    `20260907162743_add_notes` (el `DEFAULT 'MEDIA'` de la columna `NOT NULL` rellenó las filas
+    existentes; sin backfill manual). Generada con `npx prisma migrate dev` contra un Postgres
+    real (instalado en este sandbox — `apt-get install postgresql`, sin Docker disponible aquí),
+    no a mano.
+  - **Endpoints**: `POST /api/posts/notes`, `PATCH /api/posts/notes/:id`,
+    `GET /api/users/:username/notes` (`src/posts/posts.controller.ts`/`posts.service.ts`).
+    `GET /api/posts/:id` y `DELETE /api/posts/:id` sirven ambos `kind` sin cambios;
+    `PATCH /api/posts/:id` responde `400` si manda `media` sobre una nota.
+    `PATCH /api/posts/reorder` limita `owned` a `kind: MEDIA`, así que el id de una nota nunca
+    calza con el conjunto esperado y cae en el mismo `400` — sin código especial para rechazarla.
+  - **Validación por tipo de bloque y derivación del `excerpt`** en
+    `src/posts/utils/note-blocks.util.ts` (`assertBlocksAreValid`, `deriveExcerpt`,
+    `noteTextForTags`), con su propio spec (`note-blocks.util.spec.ts`) — igual que
+    `tags.util.ts`. Se valida en el servicio, no encadenando `@ValidateIf` en el DTO: la regla
+    depende de un campo hermano (`type`) y un `BadRequestException` explícito es más simple y
+    más difícil de romper por accidente que varios `@ValidateIf` compitiendo por la misma
+    propiedad.
+  - **`notesCount` en `UserPublic`**: `PostsService.countByAuthorIds` ganó un parámetro `kind`
+    (antes contaba todo); `users` lo llama dos veces (`MEDIA`/`NOTE`) en paralelo, mismo patrón
+    que ya usaba para `postsCount`. `GET /api/users/:username/posts` ahora filtra `kind: MEDIA`.
+  - **Home feed**: `fetchRanked` no filtra por `kind` (sin cambios); se verificó a mano que
+    ninguna de sus consultas lo hiciera antes de cerrar la fase.
+  - **`docs/openapi.json` regenerado**: 3 rutas nuevas (`/posts/notes`, `/posts/notes/{id}`,
+    `/users/{username}/notes`) y 4 schemas nuevos (`CreateNoteDto`, `UpdateNoteDto`,
+    `NoteBlockInputDto`, `PostBlockResponseDto`), `PostResponseDto` con `kind`/`title`/`excerpt`/
+    `cover`/`blocks` (opcionales, según `kind`) y `UserPublicView` con `notesCount` — verificado
+    leyendo el JSON resultante, no asumido.
+  - **Verificado por mí, no reportado por un hijo** (sesión única, sin delegar esta fase):
+    `npm run lint`, `npm run build` y `npm test` (**11 suites, 191 tests**, 27 nuevos) en verde,
+    y `npm run api:export` con el resultado inspeccionado. Sin entorno con Postgres/Docker
+    preinstalado en este sandbox: se instaló `postgresql-16` localmente y se aplicaron las 8
+    migraciones previas más la nueva contra una base real — no solo contra mocks.
+- **Falta:** la **revisión final en Opus 5** que pide la cabecera de esta fase (disparador 6:
+  cambia el contrato que consumen los dos clientes) — no se ejecutó en esta tarea porque esta
+  sesión corrió en Sonnet 5 de punta a punta; queda pendiente antes de dar la fase por cerrada
+  del todo según `ORCHESTRATION.md`.
+- **Necesito:** nada bloqueante para los clientes — el contrato está cerrado y exportado. La
+  revisión en Opus 5 de arriba es lo único que falta del lado de back-end.
+- **Sigue:** la parte de clientes de la Fase 4.6 (`micelio-front-end`, `micelio-app`): tab Notas
+  en el perfil, lector, editor y tarjeta de nota en el home, todo sobre este contrato ya cerrado
+  (`npm run sync:api` puede correrse ya).
+
 ### 2026-09-07 — Política de modelos por fase y tarea (tarea, proceso entre repos)
 - **Listo:** `ORCHESTRATION.md` reemplaza la tabla abstracta de "Modelos por rol" (que decía
   "razonamiento alto"/"balanceado", sin nombres) por una política concreta, pedida por el dueño

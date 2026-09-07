@@ -335,6 +335,45 @@ proceso, no borres la entrada: muévela a "Procesos eliminados" con el motivo.
   y no fijaba el número; se eligió bastante menor al de la descripción de un post (2200) porque
   un comentario es una respuesta corta, no una pieza de contenido.
 
+### Notas: columnas de opinión (Fase 4.6)
+- **Módulos:** `src/posts` (+ `src/users`/`src/files` por sus servicios públicos, `src/storage`)
+- **Disparadores:** `POST /api/posts/notes`, `PATCH /api/posts/notes/:id`,
+  `GET /api/users/:username/notes`. `GET /api/posts/:id` y `DELETE /api/posts/:id` (ya
+  existentes) sirven ambos `kind` sin cambios.
+- **Pasos (crear):** `assertBlocksAreValid` (`src/posts/utils/note-blocks.util.ts`) valida las
+  reglas por tipo de bloque (PARAGRAPH/QUOTE/HEADING exigen `text`, prohíben `fileAssetId`;
+  IMAGE exige `fileAssetId`, prohíbe `text`) → `assertNoteAssetsAreUsable` valida que la portada
+  y las imágenes de bloques sean archivos **de tipo IMAGE** de la biblioteca del autor
+  (`FilesService.findOwnedByUser` resuelve 404/403; el tipo se valida aquí) → las etiquetas se
+  normalizan igual que en publicaciones, pero el texto de entrada es título + todos los bloques
+  de texto (`noteTextForTags`), no solo un campo → crea el `Post` (`kind: NOTE`) con sus
+  `post_blocks` (el índice del arreglo es `position`) → emite `post.created`. **No** toca el
+  contador de `position` de `MEDIA`: una nota no empuja ni es empujada por el feed curado.
+- **Pasos (editar):** mismo patrón que `PATCH /api/posts/:id` con `media` — `blocks` presente
+  reemplaza la lista completa (borra y recrea `post_blocks` en la misma transacción). Si cambia
+  `title` o `blocks`, las etiquetas se recalculan aunque no venga `tags`, igual que la
+  descripción en publicaciones. `400` si se llama sobre un post que no es `kind: NOTE`, y el
+  `PATCH /api/posts/:id` genérico responde `400` si manda `media` sobre una nota (cuerpos
+  incompatibles, cada uno tiene su endpoint).
+- **Pasos (leer):** la forma de `Post` se arma igual para ambos `kind`
+  (`PostsService.buildPostView`): `kind: MEDIA` incluye `position`/`media`; `kind: NOTE` los
+  omite y agrega `title`/`excerpt`/`cover`/`blocks`. `excerpt` se **deriva en cada lectura**
+  (`deriveExcerpt`, no se persiste): los primeros 200 caracteres del primer bloque `PARAGRAPH`,
+  cortados en palabra completa. `GET /api/users/:username/notes` pagina por `createdAt` desc
+  (no por `position`, que las notas no usan) con el mismo cursor opaco que el resto de listas.
+  `findByUsername` (tab Publicaciones) filtra `kind: MEDIA` para no mezclar notas.
+- **Reorder:** `PATCH /api/posts/reorder` ahora limita `owned` a `kind: MEDIA`; si `orderedIds`
+  trae el id de una nota, no calza con ese conjunto y cae en el mismo `400` de siempre — sin
+  código especial para rechazar notas.
+- **Home feed:** `GET /api/feed` no filtra por `kind` en ningún punto de la consulta de
+  candidatos (`fetchRanked`): una nota es un post más para el algoritmo, con su `createdAt` y su
+  autor. `notesCount` en `UserPublic` sale de `PostsService.countByAuthorIds(ids, 'NOTE')`,
+  hermano de `postsCount` (`'MEDIA'`) — mismo método, ahora con el `kind` como parámetro.
+- **Notas:** una nota **es** un `Post` (`kind: NOTE`); comparte tabla, likes, guardados,
+  comentarios y visibilidad sin código nuevo — ver la decisión y las alternativas descartadas en
+  `ARCHITECTURE.md` (desviación 4). `PostBlock.fileAssetId` y `Post.coverFileAssetId` usan
+  `onDelete: Restrict`, igual que `PostMedia`.
+
 ### Manejo transversal de peticiones
 - **Módulos:** `src/common`, `src/main.ts`
 - **Qué:** `TransformInterceptor` envuelve las respuestas, `HttpExceptionFilter` normaliza los

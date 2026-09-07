@@ -450,18 +450,23 @@ describe('UsersService', () => {
     });
   });
 
-  // Fase 4.5. El conteo es un dato de `posts`: `users` lo pide por servicio y nunca cuenta la
-  // tabla por su cuenta (regla 7). Un autor sin publicaciones no sale del `groupBy`, así que la
-  // ausencia tiene que resolverse como 0 y no como `undefined`.
+  // Fase 4.5 (postsCount) y Fase 4.6 (notesCount). El conteo es un dato de `posts`: `users` lo
+  // pide por servicio y nunca cuenta la tabla por su cuenta (regla 7), una vez por `kind`. Un
+  // autor sin filas de ese `kind` no sale del `groupBy`, así que la ausencia tiene que
+  // resolverse como 0 y no como `undefined`.
   describe('postsCount', () => {
-    it('toma el conteo de PostsService', async () => {
+    it('toma el conteo de PostsService, uno por kind', async () => {
       prisma.user.findUnique.mockResolvedValue({ ...baseUser, isPublic: true });
-      posts.countByAuthorIds.mockResolvedValue(new Map([['user-1', 7]]));
+      posts.countByAuthorIds.mockImplementation(async (_ids: string[], kind: string) =>
+        kind === 'MEDIA' ? new Map([['user-1', 7]]) : new Map([['user-1', 2]]),
+      );
 
       const result = await usersService.getPublicProfile('ada', 'viewer-1');
 
-      expect(posts.countByAuthorIds).toHaveBeenCalledWith(['user-1']);
+      expect(posts.countByAuthorIds).toHaveBeenCalledWith(['user-1'], 'MEDIA');
+      expect(posts.countByAuthorIds).toHaveBeenCalledWith(['user-1'], 'NOTE');
       expect(result.postsCount).toBe(7);
+      expect(result.notesCount).toBe(2);
     });
 
     it('es 0 cuando el autor no tiene publicaciones', async () => {

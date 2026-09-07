@@ -27,6 +27,22 @@ enum FeedLayout {
   MASONRY
 }
 
+/// Fase 4.6: una nota es un `Post` con `kind: NOTE` (ver `docs/ARCHITECTURE.md`, desviación 4).
+/// `MEDIA` es el default y describe todas las publicaciones existentes antes de esta fase.
+enum PostKind {
+  MEDIA
+  NOTE
+}
+
+/// Tipo de un bloque del cuerpo de una nota (Fase 4.6). Reglas por tipo en
+/// `docs/API-CONTRACTS.md` ("Notas — Fase 4.6").
+enum PostBlockType {
+  PARAGRAPH
+  HEADING
+  QUOTE
+  IMAGE
+}
+
 model User {
   id           String   @id @default(uuid())
   email        String   @unique
@@ -117,33 +133,73 @@ model FileAsset {
   height       Int?
   createdAt    DateTime @default(now())
 
-  folder Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)
-  posts  PostMedia[]
+  folder      Folder      @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  posts       PostMedia[]
+  // Portada de una nota (Fase 4.6) y las imágenes de sus bloques `IMAGE`: mismo archivo de
+  // biblioteca, `Restrict` como `PostMedia` (no se borra mientras esté en una nota publicada).
+  postCovers  Post[]      @relation("PostCover")
+  blockImages PostBlock[]
 
   @@index([folderId])
   @@map("file_assets")
 }
 
 model Post {
-  id          String   @id @default(uuid())
-  authorId    String
-  description String?
-  tags        String[]
-  position    Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(uuid())
+  authorId         String
+  // `MEDIA` (default) es una publicación normal; `NOTE` es una columna de opinión (Fase 4.6).
+  // Los campos de abajo son nulos según el `kind` — ver `docs/DATA-MODEL.md`.
+  kind             PostKind @default(MEDIA)
+  description      String?
+  tags             String[]
+  // Orden curado del feed propio. Solo tiene sentido para `MEDIA`; las notas se listan por
+  // `createdAt` descendente y no participan del reordenamiento (`PATCH /api/posts/reorder`).
+  position         Int
+  // Título de una nota (obligatorio a nivel de DTO cuando `kind = NOTE`); siempre nulo en `MEDIA`.
+  title            String?
+  coverFileAssetId String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  author   User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  media    PostMedia[]
-  likes    Like[]
-  savedBy  SavedPost[]
-  comments Comment[]
+  author         User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  media          PostMedia[]
+  // `Restrict`, igual que `PostMedia`: la portada no desaparece de la biblioteca del autor
+  // mientras la nota exista.
+  coverFileAsset FileAsset?  @relation("PostCover", fields: [coverFileAssetId], references: [id], onDelete: Restrict)
+  blocks         PostBlock[]
+  likes          Like[]
+  savedBy        SavedPost[]
+  comments       Comment[]
 
   // El feed propio se lee siempre por autor y en el orden que él curó (`position` asc).
   @@index([authorId, position])
+  // Notas de un autor, más recientes primero (`GET /api/users/:username/notes`).
+  @@index([authorId, kind, createdAt])
   // Búsqueda por etiquetas (Fase 9) y afinidad por temas (Fase 5) sobre el arreglo `tags`.
   @@index([tags(ops: ArrayOps)], type: Gin)
   @@map("posts")
+}
+
+/// Fase 4.6: un bloque del cuerpo de una nota, en el orden de lectura (`position`, 0-based).
+/// Reglas exactas por `type` en `docs/API-CONTRACTS.md` ("Notas — Fase 4.6").
+model PostBlock {
+  id          String        @id @default(uuid())
+  postId      String
+  position    Int
+  type        PostBlockType
+  // Contenido de PARAGRAPH/HEADING/QUOTE; nulo en IMAGE.
+  text        String?
+  // Archivo de imagen de la biblioteca del autor; solo en IMAGE. `Restrict`, igual que `PostMedia`.
+  fileAssetId String?
+  // Pie de foto opcional de un bloque IMAGE.
+  caption     String?
+
+  post      Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  fileAsset FileAsset? @relation(fields: [fileAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([postId, position])
+  @@index([fileAssetId])
+  @@map("post_blocks")
 }
 
 model PostMedia {

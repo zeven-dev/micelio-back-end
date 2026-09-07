@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { FeedLayout, Role, User } from '@prisma/client';
+import { FeedLayout, PostKind, Role, User } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { BYTES_PER_MB } from '../files/utils/file-type.util';
 import { PostsService } from '../posts/posts.service';
@@ -96,10 +96,15 @@ export class UserPublicView {
 
   @ApiProperty({
     description:
-      'Publicaciones del usuario. Visible también en la vista limitada de un perfil privado: ' +
-      'dice cuánto hay, no qué hay.',
+      'Publicaciones (`kind: MEDIA`) del usuario. Visible también en la vista limitada de un ' +
+      'perfil privado: dice cuánto hay, no qué hay.',
   })
   postsCount: number;
+
+  @ApiProperty({
+    description: 'Notas (`kind: NOTE`, Fase 4.6) del usuario. Misma visibilidad que `postsCount`.',
+  })
+  notesCount: number;
 
   @ApiProperty()
   followersCount: number;
@@ -388,18 +393,25 @@ export class UsersService {
 
     const users = await this.prisma.user.findMany({ where: { id: { in: unique } } });
     const userIds = users.map((user) => user.id);
-    // Un solo viaje al grafo y uno solo al conteo de publicaciones para todos los usuarios de la
-    // página, no dos consultas por cada uno.
-    const [graph, postCounts] = await Promise.all([
+    // Un solo viaje al grafo y uno solo al conteo de publicaciones/notas para todos los usuarios
+    // de la página, no dos consultas por cada uno.
+    const [graph, postCounts, noteCounts] = await Promise.all([
       this.socialService.getGraphInfoFor(userIds, viewerId),
-      this.postsService.countByAuthorIds(userIds),
+      this.postsService.countByAuthorIds(userIds, PostKind.MEDIA),
+      this.postsService.countByAuthorIds(userIds, PostKind.NOTE),
     ]);
     const views = await Promise.all(
       users.map(
         async (user) =>
           [
             user.id,
-            await this.buildView(user, viewerId, graph.get(user.id), postCounts.get(user.id) ?? 0),
+            await this.buildView(
+              user,
+              viewerId,
+              graph.get(user.id),
+              postCounts.get(user.id) ?? 0,
+              noteCounts.get(user.id) ?? 0,
+            ),
           ] as const,
       ),
     );
@@ -416,13 +428,26 @@ export class UsersService {
     viewerId?: string,
     graph?: SocialGraphInfo,
     postsCount?: number,
+    notesCount?: number,
   ): Promise<UserPublicView> {
-    const [info, counted] = await Promise.all([
+    const [info, countedPosts, countedNotes] = await Promise.all([
       graph ?? this.socialService.getGraphInfoFor([user.id], viewerId).then((m) => m.get(user.id)!),
-      postsCount ?? this.postsService.countByAuthorIds([user.id]).then((m) => m.get(user.id) ?? 0),
+      postsCount ??
+        this.postsService
+          .countByAuthorIds([user.id], PostKind.MEDIA)
+          .then((m) => m.get(user.id) ?? 0),
+      notesCount ??
+        this.postsService
+          .countByAuthorIds([user.id], PostKind.NOTE)
+          .then((m) => m.get(user.id) ?? 0),
     ]);
     const includeExtended = this.socialService.canViewWithGraph(user, viewerId, info);
-    return this.toUserPublic(user, { includeExtended, graph: info, postsCount: counted });
+    return this.toUserPublic(user, {
+      includeExtended,
+      graph: info,
+      postsCount: countedPosts,
+      notesCount: countedNotes,
+    });
   }
 
   private async requireById(id: string): Promise<User> {
@@ -435,7 +460,12 @@ export class UsersService {
 
   private async toUserPublic(
     user: User,
-    opts: { includeExtended: boolean; graph: SocialGraphInfo; postsCount: number },
+    opts: {
+      includeExtended: boolean;
+      graph: SocialGraphInfo;
+      postsCount: number;
+      notesCount: number;
+    },
   ): Promise<UserPublicView> {
     const [avatarUrl, bannerUrl] = await Promise.all([
       user.avatarKey ? this.storageService.getSignedDownloadUrl(user.avatarKey) : null,
@@ -450,6 +480,7 @@ export class UsersService {
       bannerUrl,
       isPublic: user.isPublic,
       postsCount: opts.postsCount,
+      notesCount: opts.notesCount,
       followersCount: opts.graph.followersCount,
       followingCount: opts.graph.followingCount,
       viewerFollows: opts.graph.viewerFollows,

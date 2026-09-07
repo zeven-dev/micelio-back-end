@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Post, PostMedia } from '@prisma/client';
+import { Post, PostBlock, PostBlockType, PostKind, PostMedia } from '@prisma/client';
 import {
   CursorPage,
   CursorPaginationDto,
@@ -20,10 +20,18 @@ import { FilesService, LibraryAssetRef } from '../files/files.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SocialService } from '../social/social.service';
 import { STORAGE_SERVICE, StorageService } from '../storage/storage.service';
+import { CreateNoteDto, NoteBlockInputDto } from './dto/create-note.dto';
 import { CreatePostDto, PostMediaInputDto } from './dto/create-post.dto';
-import { PostMediaResponseDto, PostResponseDto, ReorderResponseDto } from './dto/post-response.dto';
+import {
+  PostBlockResponseDto,
+  PostImageResponseDto,
+  PostMediaResponseDto,
+  PostResponseDto,
+  ReorderResponseDto,
+} from './dto/post-response.dto';
 import { ReorderPostsDto } from './dto/reorder-posts.dto';
 import { SavedPostItemDto } from './dto/save-response.dto';
+import { UpdateNoteDto } from './dto/update-note.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import {
   EMPTY_POST_INTERACTION,
@@ -31,13 +39,22 @@ import {
   PostInteractionsService,
 } from './post-interactions.service';
 import { UserPublicView, UsersService } from '../users/users.service';
+import { assertBlocksAreValid, deriveExcerpt, noteTextForTags } from './utils/note-blocks.util';
 import { buildTags } from './utils/tags.util';
 
-type PostWithMedia = Post & { media: PostMedia[] };
+type PostWithRelations = Post & { media: PostMedia[]; blocks: PostBlock[] };
+
+/** `include` compartido por toda consulta que arma un `Post`: siempre trae medios y bloques, ya
+ * que una fila puede ser `MEDIA` (solo usa `media`) o `NOTE` (solo usa `blocks`) — nunca las dos.
+ */
+const POST_INCLUDE = {
+  media: { orderBy: { order: 'asc' as const } },
+  blocks: { orderBy: { position: 'asc' as const } },
+};
 
 /** Un candidato del home con su clave de orden ya calculada para este viewer. */
 interface RankedPost {
-  post: PostWithMedia;
+  post: PostWithRelations;
   rankAt: Date;
 }
 
@@ -125,17 +142,54 @@ export class PostsService {
     await this.assertMediaIsUsable(dto.media, authorId);
 
     const post = await this.prisma.$transaction(async (tx) => {
-      await tx.post.updateMany({ where: { authorId }, data: { position: { increment: 1 } } });
+      // El contador de posición es propio de `MEDIA`: las notas no reordenan este feed (ver
+      // "Notas — Fase 4.6" en `docs/API-CONTRACTS.md`), así que no deben desplazarse entre sí.
+      await tx.post.updateMany({
+        where: { authorId, kind: PostKind.MEDIA },
+        data: { position: { increment: 1 } },
+      });
       return tx.post.create({
         data: {
           authorId,
+          kind: PostKind.MEDIA,
           description: dto.description ?? null,
           tags,
           position: 0,
           media: { create: toMediaRows(dto.media) },
         },
-        include: { media: { orderBy: { order: 'asc' } } },
+        include: POST_INCLUDE,
       });
+    });
+
+    this.eventEmitter.emit(DOMAIN_EVENTS.POST_CREATED, {
+      postId: post.id,
+      authorId,
+      tags,
+    } satisfies PostCreatedEvent);
+
+    return this.toResponse(post, authorId);
+  }
+
+  /**
+   * Crea una nota (Fase 4.6): un `Post` con `kind: NOTE`. No participa del contador de
+   * `position` de `MEDIA` — se lista por `createdAt` (ver `findNotesByUsername`).
+   */
+  async createNote(authorId: string, dto: CreateNoteDto): Promise<PostResponseDto> {
+    assertBlocksAreValid(dto.blocks);
+    await this.assertNoteAssetsAreUsable(dto.coverFileAssetId, dto.blocks, authorId);
+    const tags = buildTags(dto.tags, noteTextForTags(dto.title, dto.blocks));
+
+    const post = await this.prisma.post.create({
+      data: {
+        authorId,
+        kind: PostKind.NOTE,
+        title: dto.title,
+        tags,
+        position: 0,
+        coverFileAssetId: dto.coverFileAssetId ?? null,
+        blocks: { create: toBlockRows(dto.blocks) },
+      },
+      include: POST_INCLUDE,
     });
 
     this.eventEmitter.emit(DOMAIN_EVENTS.POST_CREATED, {
@@ -150,7 +204,7 @@ export class PostsService {
   async findOne(id: string, viewerId: string): Promise<PostResponseDto> {
     const post = await this.prisma.post.findUnique({
       where: { id },
-      include: { media: { orderBy: { order: 'asc' } } },
+      include: POST_INCLUDE,
     });
     if (!post) {
       throw new NotFoundException('Publicación no encontrada');
@@ -161,7 +215,11 @@ export class PostsService {
     return this.toResponse(post, viewerId);
   }
 
-  /** Feed propio de un usuario: sus publicaciones en el orden que él curó (`position` asc). */
+  /**
+   * Feed propio de un usuario: sus publicaciones en el orden que él curó (`position` asc).
+   * Filtra `kind: MEDIA` para que el tab Publicaciones no muestre notas — las notas tienen su
+   * propio listado (`findNotesByUsername`).
+   */
   async findByUsername(
     username: string,
     viewerId: string,
@@ -180,6 +238,7 @@ export class PostsService {
     const posts = await this.prisma.post.findMany({
       where: {
         authorId: author.id,
+        kind: PostKind.MEDIA,
         // `position` no es único: el desempate por `id` es lo que hace que la página siguiente
         // reanude exactamente donde terminó la anterior.
         ...(cursor
@@ -188,7 +247,7 @@ export class PostsService {
       },
       orderBy: [{ position: 'asc' }, { id: 'asc' }],
       take: limit + 1,
-      include: { media: { orderBy: { order: 'asc' } } },
+      include: POST_INCLUDE,
     });
 
     const hasMore = posts.length > limit;
@@ -200,8 +259,61 @@ export class PostsService {
     };
   }
 
+  /**
+   * Notas de un usuario (Fase 4.6), más recientes primero (`createdAt` desc, desempate `id`
+   * desc) — a diferencia del feed propio, las notas no tienen orden curado. Misma regla de
+   * visibilidad que `findByUsername`.
+   */
+  async findNotesByUsername(
+    username: string,
+    viewerId: string,
+    query: CursorPaginationDto,
+  ): Promise<CursorPage<PostResponseDto>> {
+    const author = await this.usersService.findByUsername(username);
+    if (!author) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+    if (!(await this.usersService.canViewContentOf(author.id, viewerId))) {
+      throw new ForbiddenException('Este perfil es privado');
+    }
+
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+    const cursor = query.cursor ? decodeCursor(query.cursor, isSavedCursor) : null;
+    const notes = await this.prisma.post.findMany({
+      where: {
+        authorId: author.id,
+        kind: PostKind.NOTE,
+        ...(cursor
+          ? {
+              OR: [
+                { createdAt: { lt: new Date(cursor.c) } },
+                { createdAt: new Date(cursor.c), id: { lt: cursor.id } },
+              ],
+            }
+          : {}),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: POST_INCLUDE,
+    });
+
+    const hasMore = notes.length > limit;
+    const page = hasMore ? notes.slice(0, limit) : notes;
+    const last = page[page.length - 1];
+    return {
+      items: await this.toResponseList(page, viewerId),
+      nextCursor:
+        hasMore && last ? encodeCursor({ c: last.createdAt.toISOString(), id: last.id }) : null,
+    };
+  }
+
   async update(id: string, authorId: string, dto: UpdatePostDto): Promise<PostResponseDto> {
     const current = await this.findOwnedOrFail(id, authorId);
+    // El cuerpo de una nota es otro (`blocks`, no `media`): `PATCH /api/posts/notes/:id` es su
+    // endpoint propio. Este solo rechaza el caso mixto explícito en `docs/API-CONTRACTS.md`.
+    if (dto.media !== undefined && current.kind !== PostKind.MEDIA) {
+      throw new BadRequestException('Esta publicación no acepta medios: es una nota');
+    }
 
     const description = dto.description !== undefined ? dto.description : current.description;
     // Si cambia la descripción, sus `#hashtags` se vuelven a fusionar aunque el cliente no
@@ -228,7 +340,55 @@ export class PostsService {
           tags,
           ...(dto.media !== undefined ? { media: { create: toMediaRows(dto.media) } } : {}),
         },
-        include: { media: { orderBy: { order: 'asc' } } },
+        include: POST_INCLUDE,
+      });
+    });
+
+    return this.toResponse(updated, authorId);
+  }
+
+  /**
+   * Edita una nota. `blocks` presente reemplaza la lista completa (no hay deltas), igual que
+   * `media` en publicaciones. Si cambia `title` o `blocks`, las etiquetas se recalculan aunque
+   * el cliente no mande `tags` — mismo criterio que `update()`.
+   */
+  async updateNote(id: string, authorId: string, dto: UpdateNoteDto): Promise<PostResponseDto> {
+    const current = await this.findOwnedOrFail(id, authorId);
+    if (current.kind !== PostKind.NOTE) {
+      throw new BadRequestException('Esta publicación no es una nota');
+    }
+    if (dto.blocks !== undefined) {
+      assertBlocksAreValid(dto.blocks);
+    }
+    await this.assertNoteAssetsAreUsable(
+      dto.coverFileAssetId ?? undefined,
+      dto.blocks ?? [],
+      authorId,
+    );
+
+    const title = dto.title ?? current.title!;
+    const blocksForTags: { text?: string | null }[] = dto.blocks ?? current.blocks;
+    const tags =
+      dto.tags !== undefined || dto.title !== undefined || dto.blocks !== undefined
+        ? buildTags(dto.tags ?? current.tags, noteTextForTags(title, blocksForTags))
+        : current.tags;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      if (dto.blocks !== undefined) {
+        // `blocks` reemplaza la lista completa: borrar y recrear mantiene `position` alineado
+        // con el arreglo del cliente sin diffs frágiles, igual que `media` en publicaciones.
+        await tx.postBlock.deleteMany({ where: { postId: id } });
+      }
+      return tx.post.update({
+        where: { id },
+        data: {
+          title,
+          tags,
+          coverFileAssetId:
+            dto.coverFileAssetId !== undefined ? dto.coverFileAssetId : current.coverFileAssetId,
+          ...(dto.blocks !== undefined ? { blocks: { create: toBlockRows(dto.blocks) } } : {}),
+        },
+        include: POST_INCLUDE,
       });
     });
 
@@ -250,8 +410,10 @@ export class PostsService {
    * exactamente con las publicaciones del usuario; si no, `400` (ver `API-CONTRACTS.md`).
    */
   async reorder(authorId: string, dto: ReorderPostsDto): Promise<ReorderResponseDto> {
+    // Solo `MEDIA`: si `orderedIds` trae el id de una nota, no aparece en `ownedIds` y la
+    // comprobación de abajo falla con el mismo 400 — es justo el rechazo que pide el contrato.
     const owned = await this.prisma.post.findMany({
-      where: { authorId },
+      where: { authorId, kind: PostKind.MEDIA },
       select: { id: true },
     });
     const ownedIds = new Set(owned.map((post) => post.id));
@@ -381,7 +543,7 @@ export class PostsService {
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
-      include: { media: { orderBy: { order: 'asc' } } },
+      include: POST_INCLUDE,
     });
 
     return posts.map((post) => ({
@@ -446,34 +608,35 @@ export class PostsService {
     if (unique.length === 0) return new Map();
     const posts = await this.prisma.post.findMany({
       where: { id: { in: unique } },
-      include: { media: { orderBy: { order: 'asc' } } },
+      include: POST_INCLUDE,
     });
     const responses = await this.toResponseList(posts, viewerId);
     return new Map(responses.map((post) => [post.id, post]));
   }
 
   /**
-   * Cuántas publicaciones tiene cada autor, en una sola consulta agrupada. Lo consume `users`
-   * para el `postsCount` de la cabecera de perfil (Fase 4.5): el conteo es un dato de **este**
-   * dominio, así que `users` lo pide por servicio en vez de contar la tabla `posts` por su
-   * cuenta (regla 7 de `AGENTS.md`). Los autores sin publicaciones no salen en el `groupBy`;
-   * quien llama resuelve la ausencia como `0`.
+   * Cuántas publicaciones de un `kind` tiene cada autor, en una sola consulta agrupada. Lo
+   * consume `users` dos veces (`MEDIA` para `postsCount`, `NOTE` para `notesCount`) para la
+   * cabecera de perfil: el conteo es un dato de **este** dominio, así que `users` lo pide por
+   * servicio en vez de contar la tabla `posts` por su cuenta (regla 7 de `AGENTS.md`). Los
+   * autores sin filas de ese `kind` no salen en el `groupBy`; quien llama resuelve la ausencia
+   * como `0`.
    */
-  async countByAuthorIds(authorIds: string[]): Promise<Map<string, number>> {
+  async countByAuthorIds(authorIds: string[], kind: PostKind): Promise<Map<string, number>> {
     const unique = [...new Set(authorIds)];
     if (unique.length === 0) return new Map();
     const grouped = await this.prisma.post.groupBy({
       by: ['authorId'],
-      where: { authorId: { in: unique } },
+      where: { authorId: { in: unique }, kind },
       _count: { _all: true },
     });
     return new Map(grouped.map((row) => [row.authorId, row._count._all]));
   }
 
-  private async findOwnedOrFail(id: string, authorId: string): Promise<PostWithMedia> {
+  private async findOwnedOrFail(id: string, authorId: string): Promise<PostWithRelations> {
     const post = await this.prisma.post.findUnique({
       where: { id },
-      include: { media: { orderBy: { order: 'asc' } } },
+      include: POST_INCLUDE,
     });
     if (!post) {
       throw new NotFoundException('Publicación no encontrada');
@@ -496,13 +659,36 @@ export class PostsService {
     await this.filesService.findOwnedByUser(ids, authorId);
   }
 
-  private async toResponse(post: PostWithMedia, viewerId: string): Promise<PostResponseDto> {
+  /**
+   * La portada y las imágenes de bloques `IMAGE` de una nota deben ser archivos **de tipo
+   * IMAGE** de la biblioteca del autor (404/403 los resuelve `findOwnedByUser`; el tipo se
+   * valida aquí porque es una regla propia de notas, no de la biblioteca en general).
+   */
+  private async assertNoteAssetsAreUsable(
+    coverFileAssetId: string | null | undefined,
+    blocks: NoteBlockInputDto[],
+    authorId: string,
+  ): Promise<void> {
+    const imageBlockIds = blocks
+      .filter((block) => block.type === PostBlockType.IMAGE)
+      .map((block) => block.fileAssetId!);
+    const ids = [...imageBlockIds, ...(coverFileAssetId ? [coverFileAssetId] : [])];
+    if (ids.length === 0) return;
+
+    const assets = await this.filesService.findOwnedByUser(ids, authorId);
+    const nonImage = assets.some((asset) => asset.type !== 'IMAGE');
+    if (nonImage) {
+      throw new BadRequestException('La portada y las imágenes de bloques deben ser de tipo IMAGE');
+    }
+  }
+
+  private async toResponse(post: PostWithRelations, viewerId: string): Promise<PostResponseDto> {
     const [response] = await this.toResponseList([post], viewerId);
     return response;
   }
 
   private async toResponseList(
-    posts: PostWithMedia[],
+    posts: PostWithRelations[],
     viewerId: string,
   ): Promise<PostResponseDto[]> {
     if (posts.length === 0) {
@@ -520,7 +706,13 @@ export class PostsService {
         viewerId,
       ),
     ]);
-    const assetIds = posts.flatMap((post) => post.media.map((item) => item.fileAssetId));
+    const assetIds = [
+      ...posts.flatMap((post) => post.media.map((item) => item.fileAssetId)),
+      ...posts.flatMap((post) =>
+        post.blocks.flatMap((block) => (block.fileAssetId ? [block.fileAssetId] : [])),
+      ),
+      ...posts.flatMap((post) => (post.coverFileAssetId ? [post.coverFileAssetId] : [])),
+    ];
     const assets = new Map(
       (await this.filesService.findManyByIds(assetIds)).map((asset) => [asset.id, asset]),
     );
@@ -531,7 +723,7 @@ export class PostsService {
   }
 
   private async buildPostView(
-    post: PostWithMedia,
+    post: PostWithRelations,
     viewerId: string,
     authors: Map<string, UserPublicView>,
     assets: Map<string, LibraryAssetRef>,
@@ -542,26 +734,72 @@ export class PostsService {
       throw new NotFoundException('Autor no encontrado');
     }
 
+    const isAuthor = post.authorId === viewerId;
+    const interaction = interactions.get(post.id) ?? EMPTY_POST_INTERACTION;
+    const base = {
+      id: post.id,
+      kind: post.kind,
+      author,
+      description: post.description,
+      tags: post.tags,
+      createdAt: post.createdAt,
+      viewerHasLiked: interaction.viewerHasLiked,
+      viewerHasSaved: interaction.viewerHasSaved,
+      ...(isAuthor ? { likeCount: interaction.likeCount } : {}),
+      commentCount: interaction.commentCount,
+    };
+
+    if (post.kind === PostKind.NOTE) {
+      const blocks = await Promise.all(
+        post.blocks.map((block) => this.buildBlockView(block, assets)),
+      );
+      const cover = post.coverFileAssetId
+        ? await this.buildAssetView(assets.get(post.coverFileAssetId))
+        : null;
+      return {
+        ...base,
+        title: post.title ?? '',
+        excerpt: deriveExcerpt(post.blocks),
+        cover,
+        blocks,
+      };
+    }
+
     const media = await Promise.all(
       post.media
         .filter((item) => assets.has(item.fileAssetId))
         .map((item) => this.buildMediaView(item, assets.get(item.fileAssetId)!)),
     );
+    return { ...base, position: post.position, media };
+  }
 
-    const isAuthor = post.authorId === viewerId;
-    const interaction = interactions.get(post.id) ?? EMPTY_POST_INTERACTION;
+  private async buildBlockView(
+    block: PostBlock,
+    assets: Map<string, LibraryAssetRef>,
+  ): Promise<PostBlockResponseDto> {
+    const image = block.fileAssetId
+      ? await this.buildAssetView(assets.get(block.fileAssetId))
+      : null;
     return {
-      id: post.id,
-      author,
-      description: post.description,
-      tags: post.tags,
-      position: post.position,
-      createdAt: post.createdAt,
-      media,
-      viewerHasLiked: interaction.viewerHasLiked,
-      viewerHasSaved: interaction.viewerHasSaved,
-      ...(isAuthor ? { likeCount: interaction.likeCount } : {}),
-      commentCount: interaction.commentCount,
+      position: block.position,
+      type: block.type,
+      text: block.text,
+      caption: block.caption,
+      image,
+    };
+  }
+
+  /** Firma una imagen suelta (portada de nota o imagen de un bloque) sin el `id`/`order` que sí
+   * necesita `PostMediaResponseDto`. */
+  private async buildAssetView(asset?: LibraryAssetRef): Promise<PostImageResponseDto | null> {
+    if (!asset) return null;
+    const expiresIn = this.configService.get<number>('s3.signedUrlExpiresIn') ?? 300;
+    const url = await this.storageService.getSignedDownloadUrl(asset.key, expiresIn);
+    return {
+      url,
+      expiresAt: new Date(Date.now() + expiresIn * 1000),
+      width: asset.width,
+      height: asset.height,
     };
   }
 
@@ -602,5 +840,16 @@ function toMediaRows(media: PostMediaInputDto[]) {
     order: index,
     width: item.width ?? null,
     height: item.height ?? null,
+  }));
+}
+
+/** Filas de `post_blocks` a partir del arreglo del cliente: el índice **es** `position`. */
+function toBlockRows(blocks: NoteBlockInputDto[]) {
+  return blocks.map((block, index) => ({
+    position: index,
+    type: block.type,
+    text: block.text ?? null,
+    fileAssetId: block.fileAssetId ?? null,
+    caption: block.caption ?? null,
   }));
 }

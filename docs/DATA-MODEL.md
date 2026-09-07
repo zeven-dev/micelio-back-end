@@ -275,9 +275,11 @@ servicio público — el ciclo `users` ↔ `posts` que eso crea está en `ARCHIT
   mantenerlo consistente en cada alta/baja (y en cada cascade delete); a la escala actual el
   `COUNT` con el índice `(authorId, position)` ya existente es barato y no puede desincronizarse.
 
-### Fase 4.6 — Notas (columnas de opinión)
-Las notas **no son una entidad paralela**: son un `Post` con `kind: NOTE`. Los campos que se
-agregan a `Post` son nulos en las publicaciones normales y viceversa.
+### Fase 4.6 — Notas (columnas de opinión) — **implementado** (2026-09-07)
+Migración `20260907162743_add_notes` (backfill `kind: MEDIA` vía `DEFAULT` de la columna
+`NOT NULL`, aplicado automáticamente a las filas existentes). Las notas **no son una entidad
+paralela**: son un `Post` con `kind: NOTE`. Los campos que se agregan a `Post` son nulos en las
+publicaciones normales y viceversa.
 
 - **Enum PostKind**: `MEDIA | NOTE`. `MEDIA` es el default y describe todas las filas
   existentes (la migración las rellena con `MEDIA`).
